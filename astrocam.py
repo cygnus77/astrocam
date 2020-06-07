@@ -2,14 +2,54 @@ import sys
 import tkinter
 import rawpy
 from PIL import Image, ImageTk
-import threading, time
+import time
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Future
 
 from CameraAPI.CameraAPI import Camera
 
 DEFAULT_NUM_EXPS = 5
 
+def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight):
+    raw = rawpy.imread(imageFilename)
+    print("Postprocessing")
+    rgb = raw.postprocess()
+    print("Creating PIL image")
+    img = Image.fromarray(rgb)
+    r, g, b = img.split()
+
+    if img.width > img.height:
+        w = imgCanvasWidth
+        h = int((imgCanvasWidth / img.width) * img.height)
+    else:
+        h = imgCanvasHeight
+        w = int((imgCanvasHeight / img.height) * img.width)
+    img = img.resize((w,h))
+
+    ##############HISTOGRAM##############
+    print("Computing histo")
+    red = r.histogram()
+    green = g.histogram()
+    blue = b.histogram()
+    sf_y = histoHeight / max( [max(red),max(green),max(blue)] )
+    sf_x = histoWidth / 256
+
+    red_pts = []
+    green_pts = []
+    blue_pts = []
+    for i in range(255):
+        red_pts.append(int(i*sf_x))
+        red_pts.append(histoHeight-round(red[i] * sf_y))
+        green_pts.append(int(i*sf_x))
+        green_pts.append(histoHeight-round(green[i] * sf_y))
+        blue_pts.append(int(i*sf_x))
+        blue_pts.append(histoHeight-round(blue[i] * sf_y))
+
+    params = (img, histoWidth, histoHeight, red_pts, green_pts, blue_pts)
+    return params
+
+
 class AstroCam:
-    def __init__(self, windowWidth, windowHeight, snapFn):
+    def __init__(self, windowWidth, windowHeight, snapFn, threadExecutor, processExecutor):
         self.root = tkinter.Tk()
         self.root.geometry(f"{windowWidth+20}x{windowHeight+20}")
         self.snapFn = snapFn
@@ -17,6 +57,9 @@ class AstroCam:
         self.runningExposures = 0
         self.cancelJob = False
         self.imageFilename = None
+        self.threadExecutor = threadExecutor
+        self.processExecutor = processExecutor
+
 
         self.isoNumbers=["640","800","1600","3200","5000","6400","8000", "12800"]
         self.expNumbers=[5,10,30,60,90,120]
@@ -62,14 +105,6 @@ class AstroCam:
     def takeSnapshot(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")        
         self.startWorker()
- 
-    def click(self, iso, exp):
-        time.sleep(1)
-        self.imageFilename = self.snapFn(iso, exp)
-        self.raw = rawpy.imread(self.imageFilename)
-        self.rgb = self.raw.postprocess()
-        img = Image.fromarray(self.rgb)
-        self.root.after(100, self.clickDone, img)
 
     def endRunningExposures(self, msg):
         self.runningExposures = 0
@@ -78,9 +113,9 @@ class AstroCam:
         self.startBtn["state"] = "normal" 
         self.snapshotBtn["state"] = "normal"
 
-    def clickDone(self, img):
-        self.textVar.set("Loading image...")
-        self.displayImageHisto(img)
+    def loadingDone(self, params):
+        self.textVar.set("Loaded image")
+        self.showImageHisto(*params)
         if self.runningExposures:
             if self.cancelJob:
                 self.endRunningExposures("Cancelled")
@@ -92,12 +127,23 @@ class AstroCam:
         else:
             self.endRunningExposures("Finished")
 
+    def processLoadImage(self, imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight):
+        print("Started processing worker")
+        future = self.processExecutor.submit(loadImageHisto, imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
+        future.add_done_callback(lambda f: self.root.after(100, self.loadingDone, f.result()))
+
     def startWorker(self):
         self.imageFilename = None
         self.startBtn["state"] = "disabled"
         self.snapshotBtn["state"] = "disabled"
         self.textVar.set("Taking picture" if self.runningExposures == 0 else "Taking sequence")
-        threading.Thread(target=self.click, args=(self.iso_number.get(), self.exp_time.get())).start()
+        imgCanvasWidth, imgCanvasHeight = int(self.imageCanvas["width"]), int(self.imageCanvas["height"])
+        histoWidth, histoHeight = int(self.histoCanvas["width"]), int(self.histoCanvas["height"])
+
+        print("Started capture worker")
+        self.threadExecutor.submit(lambda iso,exp: self.snapFn(iso,exp), self.iso_number.get(), self.exp_time.get()).add_done_callback(
+            lambda f: self.root.after(100, self.processLoadImage, f.result(), imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
+        )
 
     def cancel(self):
         self.cancelJob = True
@@ -169,44 +215,13 @@ class AstroCam:
         self.onIsoSelected()
         self.onExpSelected()
 
-    def displayImageHisto(self, img):
-        r, g, b = img.split()
-
-        tw, th = int(self.imageCanvas["width"]), int(self.imageCanvas["height"])
-        if img.width > img.height:
-            w = tw
-            h = int((tw / img.width) * img.height)
-        else:
-            h = th
-            w = int((th / img.height) * img.width)
-
-        img = img.resize((w,h))
+    def showImageHisto(self, img, histoWidth, histoHeight, red_pts, green_pts, blue_pts):
         self.imageObject = ImageTk.PhotoImage(img)
         self.imageCanvas.delete("all")
         self.imageCanvas.create_image((0,0),image=self.imageObject, anchor='nw')
 
-        ##############HISTOGRAM##############
-        red = r.histogram()
-        green = g.histogram()
-        blue = b.histogram()
-        width, height = int(self.histoCanvas["width"]), int(self.histoCanvas["height"])
-        sf_y = height / max( [max(red),max(green),max(blue)] )
-        sf_x = width / 256
-
         self.histoCanvas.delete("all")
-        self.histoCanvas.create_rectangle( (0,0,width,height), width=2.0, fill="black")
-
-        red_pts = []
-        green_pts = []
-        blue_pts = []
-        for i in range(255):
-            red_pts.append(int(i*sf_x))
-            red_pts.append(height-round(red[i] * sf_y))
-            green_pts.append(int(i*sf_x))
-            green_pts.append(height-round(green[i] * sf_y))
-            blue_pts.append(int(i*sf_x))
-            blue_pts.append(height-round(blue[i] * sf_y))
-
+        self.histoCanvas.create_rectangle( (0, 0, histoWidth, histoHeight), fill="black")
         self.histoCanvas.create_line(red_pts,fill="red")
         self.histoCanvas.create_line(green_pts,fill="lightgreen")
         self.histoCanvas.create_line(blue_pts,fill="white")
@@ -229,9 +244,11 @@ if __name__ == "__main__":
     #     return f"{destDir}\\Image{imgNo:03d}.nef"
 
     def testSnapFn(iso,exp):
+        time.sleep(30)
         return "sample.nef"
 
-    astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), testSnapFn) #snapFn)
-    astroCam.setupControlBoard()
-    astroCam.setupTestStart()
-    astroCam.root.mainloop()
+    with ProcessPoolExecutor() as processExecutor, ThreadPoolExecutor() as threadExecutor:
+        astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), testSnapFn, threadExecutor, processExecutor) #snapFn)
+        astroCam.setupControlBoard()
+        astroCam.setupTestStart()
+        astroCam.root.mainloop()
