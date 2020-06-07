@@ -6,6 +6,8 @@ import threading, time
 
 from CameraAPI.CameraAPI import Camera
 
+DEFAULT_NUM_EXPS = 5
+
 class AstroCam:
     def __init__(self, windowWidth, windowHeight, snapFn):
         self.root = tkinter.Tk()
@@ -17,13 +19,17 @@ class AstroCam:
         self.imageFilename = None
 
         self.isoNumbers=["640","800","1600","3200","5000","6400","8000", "12800"]
-        self.expNumbers=["5","10","30","60","90","120"]
+        self.expNumbers=[5,10,30,60,90,120]
 
         ##############VARIABLES##############
-        self.iso_number=tkinter.IntVar()
-        self.exp_number=tkinter.IntVar()
+        self.iso_number=tkinter.StringVar()
+        self.iso_number.set(self.isoNumbers[0])
+        self.exp_time=tkinter.IntVar()
+        self.exp_time.set(self.expNumbers[0])
+
+
         self.exposure_number=tkinter.IntVar()
-        self.exposure_number.set(10)
+        self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.parentFrame=tkinter.Frame(self.root)
 
         col0w = round(0.80 * windowWidth)
@@ -46,14 +52,15 @@ class AstroCam:
 
         self.parentFrame.pack(expand=False)
 
+
     def startExps(self):
-        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_number.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
+        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
         self.cancelJob = False
         self.startWorker()
 
     def takeSnapshot(self):
-        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_number.get()}")        
+        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")        
         self.startWorker()
  
     def click(self, iso, exp):
@@ -66,9 +73,9 @@ class AstroCam:
 
     def endRunningExposures(self, msg):
         self.runningExposures = 0
-        self.exposure_number.set(0)
+        self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.textVar.set(msg)
-        self.startBtn["state"] = "normal"
+        self.startBtn["state"] = "normal" 
         self.snapshotBtn["state"] = "normal"
 
     def clickDone(self, img):
@@ -82,13 +89,15 @@ class AstroCam:
                 self.startWorker()
             else:
                 self.endRunningExposures("Finished")
+        else:
+            self.endRunningExposures("Finished")
 
     def startWorker(self):
         self.imageFilename = None
         self.startBtn["state"] = "disabled"
         self.snapshotBtn["state"] = "disabled"
         self.textVar.set("Taking picture" if self.runningExposures == 0 else "Taking sequence")
-        threading.Thread(target=self.click, args=(self.iso_number.get(), self.exp_number.get())).start()
+        threading.Thread(target=self.click, args=(self.iso_number.get(), self.exp_time.get())).start()
 
     def cancel(self):
         self.cancelJob = True
@@ -115,8 +124,8 @@ class AstroCam:
         self.isoList[isoIndex]["bg"]="red"
 
     def onExpSelected(self):
-        expStr = str(self.exp_number.get())
-        expIndex= self.expNumbers.index(expStr)
+        expTime = self.exp_time.get()
+        expIndex= self.expNumbers.index(expTime)
         for i in range(len(self.expList)):
             self.expList[i]["bg"]="pink"
         self.expList[expIndex]["bg"]="red"
@@ -142,7 +151,7 @@ class AstroCam:
         tkinter.Label(self.leftControlFrame,text="EXPOSURE").grid(row=0,column=col)
         col += 1
         for i in range(len(self.expNumbers)):
-            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expNumbers[i],command=self.onExpSelected,variable=self.exp_number, value=self.expNumbers[i])
+            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expNumbers[i],command=self.onExpSelected,variable=self.exp_time, value=self.expNumbers[i])
             radioforexp.grid(row=0,column=col)
             self.expList.append(radioforexp)
             col += 1
@@ -156,6 +165,9 @@ class AstroCam:
         col += 1
         tkinter.Button(self.leftControlFrame,text="^\n|\n|",command=self.exp_number_up, width=10, height=3).grid(row=0,column=col)
         col += 1
+
+        self.onIsoSelected()
+        self.onExpSelected()
 
     def displayImageHisto(self, img):
         r, g, b = img.split()
@@ -182,11 +194,11 @@ class AstroCam:
         sf_x = width / 256
 
         self.histoCanvas.delete("all")
-        self.histoCanvas.create_rectangle( (0,0,width,height), width=2.0 )
+        self.histoCanvas.create_rectangle( (0,0,width,height), width=2.0, fill="black")
         for i in range(255):
             self.histoCanvas.create_line(int(i*sf_x),height-round(red[i] * sf_y),int((i+1)*sf_x),height-round(red[i+1] * sf_y),fill="red")
-            self.histoCanvas.create_line(int(i*sf_x),height-round(green[i] * sf_y),int((i+1)*sf_x),height-round(green[i+1] * sf_y),fill="green")
-            self.histoCanvas.create_line(int(i*sf_x),height-round(blue[i] * sf_y),int((i+1)*sf_x),height-round(blue[i+1] * sf_y),fill="blue")
+            self.histoCanvas.create_line(int(i*sf_x),height-round(green[i] * sf_y),int((i+1)*sf_x),height-round(green[i+1] * sf_y),fill="lightgreen")
+            self.histoCanvas.create_line(int(i*sf_x),height-round(blue[i] * sf_y),int((i+1)*sf_x),height-round(blue[i+1] * sf_y),fill="white")
 
     def setupTestStart(self):
         self.startBtn = tkinter.Button(self.rightControlFrame,text="START",command=self.startExps, width=10, height=3)
