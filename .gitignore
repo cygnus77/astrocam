@@ -1,0 +1,9 @@
+CameraAPI/x64/*
+CameraAPI/__pychache__/*
+*.ipch
+*.VC.db
+*.vcxproj.user
+*.vcxproj.filters
+*.nef
+*.suo
+*.pyc

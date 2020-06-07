@@ -1,6 +1,6 @@
 import ctypes
 
-lib = ctypes.windll.LoadLibrary(r"C:\src\CameraAPI\x64\Release\CameraAPI.dll")
+lib = ctypes.windll.LoadLibrary(r"C:\src\astrocam\CameraAPI\x64\Release\CameraAPI.dll")
 
 iso_map = {
     "LO-1": 0,

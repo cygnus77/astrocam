@@ -4,8 +4,7 @@ import rawpy
 from PIL import Image, ImageTk
 import threading, time
 
-sys.path.append('../CameraAPI')
-from CameraAPI import Camera
+from CameraAPI.CameraAPI import Camera
 
 class AstroCam:
     def __init__(self, windowWidth, windowHeight, snapFn):
@@ -16,6 +15,9 @@ class AstroCam:
         self.runningExposures = 0
         self.cancelJob = False
         self.imageFilename = None
+
+        self.isoNumbers=["640","800","1600","3200","5000","6400","8000", "12800"]
+        self.expNumbers=["5","10","30","60","90","120"]
 
         ##############VARIABLES##############
         self.iso_number=tkinter.IntVar()
@@ -48,8 +50,6 @@ class AstroCam:
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_number.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
         self.cancelJob = False
-        self.startBtn["state"] = "disabled"
-        self.snapshotBtn["state"] = "disabled"
         self.startWorker()
 
     def takeSnapshot(self):
@@ -85,6 +85,8 @@ class AstroCam:
 
     def startWorker(self):
         self.imageFilename = None
+        self.startBtn["state"] = "disabled"
+        self.snapshotBtn["state"] = "disabled"
         self.textVar.set("Taking picture" if self.runningExposures == 0 else "Taking sequence")
         threading.Thread(target=self.click, args=(self.iso_number.get(), self.exp_number.get())).start()
 
@@ -105,38 +107,54 @@ class AstroCam:
         else:
             self.exposure_number.set(expnum-5)
 
-    # def onIsoSelected(self):
-    #     if self.iso_number == 640
+    def onIsoSelected(self):
+        isoStr = str(self.iso_number.get())
+        isoIndex= self.isoNumbers.index(isoStr)
+        for i in range(len(self.isoList)):
+            self.isoList[i]["bg"]="pink"
+        self.isoList[isoIndex]["bg"]="red"
+
+    def onExpSelected(self):
+        expStr = str(self.exp_number.get())
+        expIndex= self.expNumbers.index(expStr)
+        for i in range(len(self.expList)):
+            self.expList[i]["bg"]="pink"
+        self.expList[expIndex]["bg"]="red"
+
     def setupControlBoard(self):
         btnHt = 5
         col = 0
-        iso_numbers=["640","800","1600","3200","5000","6400","8000", "12800"]
+
+        ##############ISO##############
+        
+        self.isoList=[]
         tkinter.Label(self.leftControlFrame,text="ISO").grid(row=0,column=col)
         col +=1
-        for i in range(len(iso_numbers)):
-            radioforiso=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg=("red" if i%2 else "pink"),height=btnHt,text=iso_numbers[i],variable=self.iso_number, value=iso_numbers[i])
-            radioforiso.grid(row=0,column=col)
+        for i in range(len(self.isoNumbers)):
+            radioBtn=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.isoNumbers[i],command=self.onIsoSelected,variable=self.iso_number, value=self.isoNumbers[i])
+            radioBtn.grid(row=0,column=col)
+            self.isoList.append(radioBtn)
             col += 1
         
         ##############EXPOSIURE TIME##############
-        tkinter.Label(self.leftControlFrame,text=" ").grid(row=0,column=col)
-        col += 1
-        exp_numbers=["5","10","30","60","90","120"]
+        
+        self.expList=[]
         tkinter.Label(self.leftControlFrame,text="EXPOSURE").grid(row=0,column=col)
         col += 1
-        for i in range(len(exp_numbers)):
-            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg=("red" if i%2 else "pink"),height=btnHt,text=exp_numbers[i],variable=self.exp_number, value=exp_numbers[i])
+        for i in range(len(self.expNumbers)):
+            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expNumbers[i],command=self.onExpSelected,variable=self.exp_number, value=self.expNumbers[i])
             radioforexp.grid(row=0,column=col)
+            self.expList.append(radioforexp)
             col += 1
 
         ##############EXPOSIURE NUMBER##############
         tkinter.Label(self.leftControlFrame,text=" ").grid(row=0,column=col)
         col += 1
-        tkinter.Button(self.leftControlFrame,text="|\n|\nV",command=self.exp_number_down).grid(row=0,column=col)
+        tkinter.Button(self.leftControlFrame,text="|\n|\nV",command=self.exp_number_down, width=10, height=3).grid(row=0,column=col)
         col += 1
         tkinter.Label(self.leftControlFrame,textvariable=self.exposure_number).grid(row=0,column=col)
         col += 1
-        tkinter.Button(self.leftControlFrame,text="^\n|\n|",command=self.exp_number_up).grid(row=0,column=col)
+        tkinter.Button(self.leftControlFrame,text="^\n|\n|",command=self.exp_number_up, width=10, height=3).grid(row=0,column=col)
         col += 1
 
     def displayImageHisto(self, img):
@@ -171,23 +189,26 @@ class AstroCam:
             self.histoCanvas.create_line(int(i*sf_x),height-round(blue[i] * sf_y),int((i+1)*sf_x),height-round(blue[i+1] * sf_y),fill="blue")
 
     def setupTestStart(self):
-        self.startBtn = tkinter.Button(self.rightControlFrame,text="START",command=self.startExps)
-        self.startBtn.grid(row=1,column=1)
-        self.snapshotBtn = tkinter.Button(self.rightControlFrame,text="SNAPSHOT",comman=self.takeSnapshot)
-        self.snapshotBtn.grid(row=0,column=1)
-        tkinter.Label(self.rightControlFrame,textvariable=self.textVar).grid(row=0,column=0)
-        tkinter.Button(self.rightControlFrame,text="Cancel", command=self.cancel).grid(row=1,column=0)
+        self.startBtn = tkinter.Button(self.rightControlFrame,text="START",command=self.startExps, width=10, height=3)
+        self.startBtn.grid(row=1,column=1,padx=5, pady=5)
+        self.snapshotBtn = tkinter.Button(self.rightControlFrame,text="SNAPSHOT",comman=self.takeSnapshot, width=10, height=3)
+        self.snapshotBtn.grid(row=0,column=1,padx=5, pady=5)
+        tkinter.Label(self.rightControlFrame,textvariable=self.textVar).grid(row=0,column=0,padx=5, pady=5)
+        tkinter.Button(self.rightControlFrame,text="Cancel", command=self.cancel, width=10, height=3).grid(row=1,column=0,padx=5, pady=5)
 
 if __name__ == "__main__":
 
-    destDir = "C:\\src\\pics"
-    cam = Camera(1, b"C:\\src\\pics")
-    def snapFn(iso, exp):
-        cam.setISO(iso)
-        imgNo = cam.takePicture(exp)
-        return f"{destDir}\\Image{imgNo:03d}.nef"
+    # destDir = "C:\\src\\pics"
+    # cam = Camera(1, b"C:\\src\\pics")
+    # def snapFn(iso, exp):
+    #     cam.setISO(iso)
+    #     imgNo = cam.takePicture(exp)
+    #     return f"{destDir}\\Image{imgNo:03d}.nef"
 
-    astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), snapFn)
+    def testSnapFn(iso,exp):
+        return "sample.nef"
+
+    astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), testSnapFn) #snapFn)
     astroCam.setupControlBoard()
     astroCam.setupTestStart()
     astroCam.root.mainloop()
