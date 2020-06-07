@@ -195,10 +195,21 @@ class AstroCam:
 
         self.histoCanvas.delete("all")
         self.histoCanvas.create_rectangle( (0,0,width,height), width=2.0, fill="black")
+
+        red_pts = []
+        green_pts = []
+        blue_pts = []
         for i in range(255):
-            self.histoCanvas.create_line(int(i*sf_x),height-round(red[i] * sf_y),int((i+1)*sf_x),height-round(red[i+1] * sf_y),fill="red")
-            self.histoCanvas.create_line(int(i*sf_x),height-round(green[i] * sf_y),int((i+1)*sf_x),height-round(green[i+1] * sf_y),fill="lightgreen")
-            self.histoCanvas.create_line(int(i*sf_x),height-round(blue[i] * sf_y),int((i+1)*sf_x),height-round(blue[i+1] * sf_y),fill="white")
+            red_pts.append(int(i*sf_x))
+            red_pts.append(height-round(red[i] * sf_y))
+            green_pts.append(int(i*sf_x))
+            green_pts.append(height-round(green[i] * sf_y))
+            blue_pts.append(int(i*sf_x))
+            blue_pts.append(height-round(blue[i] * sf_y))
+
+        self.histoCanvas.create_line(red_pts,fill="red")
+        self.histoCanvas.create_line(green_pts,fill="lightgreen")
+        self.histoCanvas.create_line(blue_pts,fill="white")
 
     def setupTestStart(self):
         self.startBtn = tkinter.Button(self.rightControlFrame,text="START",command=self.startExps, width=10, height=3)
