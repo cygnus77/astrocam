@@ -62,14 +62,13 @@ class AstroCam:
 
 
         self.isoNumbers=["640","800","1600","3200","5000","6400","8000", "12800"]
-        self.expNumbers=[5,10,30,60,90,120]
+        self.expTimes=[5,10,30,60,90,120]
 
         ##############VARIABLES##############
         self.iso_number=tkinter.StringVar()
         self.iso_number.set(self.isoNumbers[0])
         self.exp_time=tkinter.IntVar()
-        self.exp_time.set(self.expNumbers[0])
-
+        self.exp_time.set(self.expTimes[0])
 
         self.exposure_number=tkinter.IntVar()
         self.exposure_number.set(DEFAULT_NUM_EXPS)
@@ -127,9 +126,9 @@ class AstroCam:
         else:
             self.endRunningExposures("Finished")
 
-    def processLoadImage(self, imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight):
+    def processLoadImage(self, params):
         print("Started processing worker")
-        future = self.processExecutor.submit(loadImageHisto, imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
+        future = self.processExecutor.submit(loadImageHisto, *params)
         future.add_done_callback(lambda f: self.root.after(100, self.loadingDone, f.result()))
 
     def startWorker(self):
@@ -142,7 +141,7 @@ class AstroCam:
 
         print("Started capture worker")
         self.threadExecutor.submit(lambda iso,exp: self.snapFn(iso,exp), self.iso_number.get(), self.exp_time.get()).add_done_callback(
-            lambda f: self.root.after(100, self.processLoadImage, f.result(), imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
+            lambda f: self.root.after(100, self.processLoadImage, (f.result(), imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight))
         )
 
     def cancel(self):
@@ -171,7 +170,7 @@ class AstroCam:
 
     def onExpSelected(self):
         expTime = self.exp_time.get()
-        expIndex= self.expNumbers.index(expTime)
+        expIndex= self.expTimes.index(expTime)
         for i in range(len(self.expList)):
             self.expList[i]["bg"]="pink"
         self.expList[expIndex]["bg"]="red"
@@ -196,8 +195,8 @@ class AstroCam:
         self.expList=[]
         tkinter.Label(self.leftControlFrame,text="EXPOSURE").grid(row=0,column=col)
         col += 1
-        for i in range(len(self.expNumbers)):
-            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expNumbers[i],command=self.onExpSelected,variable=self.exp_time, value=self.expNumbers[i])
+        for i in range(len(self.expTimes)):
+            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expTimes[i],command=self.onExpSelected,variable=self.exp_time, value=self.expTimes[i])
             radioforexp.grid(row=0,column=col)
             self.expList.append(radioforexp)
             col += 1
@@ -244,7 +243,8 @@ if __name__ == "__main__":
     #     return f"{destDir}\\Image{imgNo:03d}.nef"
 
     def testSnapFn(iso,exp):
-        time.sleep(30)
+        print(f"Snap: iso-{iso} - {exp} secs")
+        time.sleep(exp)
         return "sample.nef"
 
     with ProcessPoolExecutor() as processExecutor, ThreadPoolExecutor() as threadExecutor:
