@@ -5,6 +5,8 @@ from PIL import Image, ImageTk
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Future
 
+from argparse import ArgumentParser
+
 from CameraAPI.CameraAPI import Camera
 
 DEFAULT_NUM_EXPS = 5
@@ -76,12 +78,12 @@ class AstroCam:
 
 
         self.isoNumbers=["640","800","1600","2000","2500","3200","5000","6400","8000", "12800"]
-        self.expTimes=[5,10,30,60,90,120]
+        self.expTimes=[1./256, 1./128,1./64,1./32,1./16,0.125,0.25,0.5,1, 5,10,30,60,90,120,150,180,240,300]
 
         ##############VARIABLES##############
         self.iso_number=tkinter.StringVar()
         self.iso_number.set(self.isoNumbers[0])
-        self.exp_time=tkinter.IntVar()
+        self.exp_time=tkinter.DoubleVar()
         self.exp_time.set(self.expTimes[0])
 
         self.exposure_number=tkinter.IntVar()
@@ -128,7 +130,7 @@ class AstroCam:
 
     def loadingDone(self, params):
         self.textVar.set("Loaded image")
-        self.showImageHisto(*params)
+        
         if self.runningExposures:
             if self.cancelJob:
                 self.endRunningExposures("Cancelled")
@@ -139,6 +141,8 @@ class AstroCam:
                 self.endRunningExposures("Finished")
         else:
             self.endRunningExposures("Finished")
+
+        self.showImageHisto(*params)
 
     def processLoadImage(self, params):
         print("Started processing worker")
@@ -200,22 +204,32 @@ class AstroCam:
         self.isoList=[]
         tkinter.Label(self.leftControlFrame,text="ISO").grid(row=0,column=col)
         col +=1
-        for i in range(len(self.isoNumbers)):
-            radioBtn=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.isoNumbers[i],command=self.onIsoSelected,variable=self.iso_number, value=self.isoNumbers[i])
-            radioBtn.grid(row=0,column=col)
-            self.isoList.append(radioBtn)
-            col += 1
+        # for i in range(len(self.isoNumbers)):
+        #     radioBtn=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.isoNumbers[i],command=self.onIsoSelected,variable=self.iso_number, value=self.isoNumbers[i])
+        #     radioBtn.grid(row=0,column=col)
+        #     self.isoList.append(radioBtn)
+        #     col += 1
+
+        isoMenu = tkinter.OptionMenu(self.leftControlFrame, self.iso_number, *self.isoNumbers)
+        isoMenu.grid(row=0, column=col)
+        self.isoList.append(isoMenu)
+        col +=1 
         
         ##############EXPOSIURE TIME##############
         
         self.expList=[]
         tkinter.Label(self.leftControlFrame,text="EXPOSURE").grid(row=0,column=col)
         col += 1
-        for i in range(len(self.expTimes)):
-            radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expTimes[i],command=self.onExpSelected,variable=self.exp_time, value=self.expTimes[i])
-            radioforexp.grid(row=0,column=col)
-            self.expList.append(radioforexp)
-            col += 1
+        # for i in range(len(self.expTimes)):
+        #     radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expTimes[i],command=self.onExpSelected,variable=self.exp_time, value=self.expTimes[i])
+        #     radioforexp.grid(row=0,column=col)
+        #     self.expList.append(radioforexp)
+        #     col += 1
+
+        expMenu = tkinter.OptionMenu(self.leftControlFrame, self.exp_time, *self.expTimes)
+        expMenu.grid(row=0, column=col)
+        self.expList.append(expMenu)
+        col += 1
 
         ##############EXPOSIURE NUMBER##############
         tkinter.Label(self.leftControlFrame,text=" ").grid(row=0,column=col)
@@ -251,8 +265,12 @@ class AstroCam:
 
 if __name__ == "__main__":
 
+    ap = ArgumentParser()
+    ap.add_argument("cameraModel", type=int, choices=[750, 5300])
+    args = ap.parse_args()
+
     destDir = "C:\\src\\pics"
-    cam = Camera(1, b"C:\\src\\pics")
+    cam = Camera(args.cameraModel, b"C:\\src\\pics")
     def snapFn(iso, exp):
         cam.setISO(iso)
         imgNo = cam.takePicture(exp)

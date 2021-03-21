@@ -45,7 +45,7 @@ SLONG CallMAIDEntryPoint(
 }
 //------------------------------------------------------------------------------------------------
 //
-BOOL Search_Module( void* Path )
+BOOL Search_Module( void* Path, const char* mdFile )
 {
 #if defined( _WIN32 )
 	char	TempPath[MAX_PATH];
@@ -54,7 +54,7 @@ BOOL Search_Module( void* Path )
 
 	// Search a module file in the current directory.
 	GetCurrentDirectory( MAX_PATH - 11, TempPath );
-	strcat( TempPath, "\\Type0015.md3" );
+	strcat( TempPath, mdFile );
 	if ( (hFile = _findfirst( TempPath, &c_file )) == -1L ) {
 		return false;
 	}
@@ -467,7 +467,7 @@ BOOL Command_CapStartGeneric( LPNkMAIDObject pObject, ULONG ulParam, NKPARAM pDa
 													refComplete );
 	if ( pnResult != NULL ) *pnResult = nResult;
 
-	return ( nResult == kNkMAIDResult_NoError || nResult == kNkMAIDResult_Pending );
+	return ( nResult == kNkMAIDResult_NoError || nResult == kNkMAIDResult_Pending || nResult == kNkMAIDResult_BulbReleaseBusy);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------

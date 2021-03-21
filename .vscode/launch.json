@@ -11,6 +11,15 @@
             "program": "${workspaceFolder}/astrocam.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Python: AstroCam",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/astrocam.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": ["5300"]
         }
     ]
 }

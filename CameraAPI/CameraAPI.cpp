@@ -2,6 +2,7 @@
 //
 
 #include <iostream>
+#include <string>
 #include	"Maid3.h"
 #include	"Maid3d1.h"
 #include	"CtrlSample.h"
@@ -18,10 +19,19 @@ char g_destDir[MAX_PATH] = { 0, };
 class CameraAPI
 {
 public:
-	CameraAPI() {
+	CameraAPI(int cameraModel) {
 		char	ModulePath[MAX_PATH];
 		ULONG	ulModID = 0;
-		if (!Search_Module(ModulePath)) throw runtime_error("Type0015 Module is not found.");
+		const char* mdFile = nullptr;
+		if (cameraModel == 5300) {
+			mdFile = "\\Type0011.md3";
+			this->BulbMode = 1;
+		}
+		else if (cameraModel == 750) {
+			mdFile = "\\Type0015.md3";
+			this->BulbMode = 2;
+		}
+		if (!Search_Module(ModulePath, mdFile)) throw runtime_error("Type0015 Module is not found.");
 		if (!Load_Module(ModulePath)) throw runtime_error("Cant load Type0015");
 		pRefMod = (LPRefObj)malloc(sizeof(RefObj));
 		InitRefObj(pRefMod);
@@ -84,7 +94,7 @@ public:
 
 	BOOL setBulbMode()
 	{
-		return setEnumProp(kNkMAIDCapability_ShutterSpeed, 2); // Bulb mode
+		return setEnumProp(kNkMAIDCapability_ShutterSpeed, this->BulbMode); // Bulb mode
 	}
 
 	BOOL setWhiteBalanceMode(ULONG wbCode) {
@@ -114,7 +124,7 @@ public:
 		//return setEnumProp(kNkMAIDCapability_Active_D_Lighting, kNkMAIDActive_D_Lighting_Off);
 	}
 
-	int takePicture(int seconds) {
+	int takePicture(float seconds) {
 
 		ULONG	ulCount = 0L;
 
@@ -132,7 +142,7 @@ public:
 		Command_Async(pRefSrc->pObject);
 
 		// Sleep for exposure
-		Sleep(seconds * 1000);
+		Sleep((DWORD)(seconds * 1000));
 
 		// Terminate capture
 		if (!GetCapInfo(pRefSrc, kNkMAIDCapability_TerminateCapture)) return -1;
@@ -270,11 +280,12 @@ private:
 	LPRefObj pRefMod;
 	LPRefObj pRefSrc;
 	ULONG ulSrcID;
+	int BulbMode = 2;
 };
 
 extern "C" {
-	__declspec(dllexport) CameraAPI* __stdcall getCameraAPI() {
-		return new CameraAPI;
+	__declspec(dllexport) CameraAPI* __stdcall getCameraAPI(int cameraModel) {
+		return new CameraAPI(cameraModel);
 	}
 
 	__declspec(dllexport) bool open(CameraAPI* cd, int camera, const char* dstDir) {
@@ -292,7 +303,7 @@ extern "C" {
 		return cd->setISO(iso);
 	}
 
-	__declspec(dllexport) int takePicture(CameraAPI* cd, int seconds) {
+	__declspec(dllexport) int takePicture(CameraAPI* cd, float seconds) {
 		return cd->takePicture(seconds);
 	}
 
@@ -304,7 +315,7 @@ extern "C" {
 
 int main()
 {
-	CameraAPI* cam = getCameraAPI();
+	CameraAPI* cam = getCameraAPI(5300);
 
 	if (!open(cam, 1, "C:\\src\\pics")) {
 		cout << "Cam setup failed" << endl;
