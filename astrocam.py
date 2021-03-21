@@ -11,8 +11,22 @@ DEFAULT_NUM_EXPS = 5
 
 def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight):
     raw = rawpy.imread(imageFilename)
-    print("Postprocessing")
-    rgb = raw.postprocess()
+    print(f"Postprocessing {imageFilename}")
+    params = rawpy.Params(demosaic_algorithm = rawpy.DemosaicAlgorithm.AHD,
+        half_size = False,
+        four_color_rgb = False,
+        fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Off,
+        use_camera_wb=True,
+        use_auto_wb=False,
+        #output_color=rawpy.ColorSpace.raw, 
+        #output_bps = 8,
+        user_flip = 0,
+        no_auto_scale = False,
+        no_auto_bright=True
+        #highlight_mode= rawpy.HighlightMode.Clip
+        )
+    rgb = raw.postprocess(params=params)
+    raw.close()
     print("Creating PIL image")
     img = Image.fromarray(rgb)
     r, g, b = img.split()
@@ -61,7 +75,7 @@ class AstroCam:
         self.processExecutor = processExecutor
 
 
-        self.isoNumbers=["640","800","1600","3200","5000","6400","8000", "12800"]
+        self.isoNumbers=["640","800","1600","2000","2500","3200","5000","6400","8000", "12800"]
         self.expTimes=[5,10,30,60,90,120]
 
         ##############VARIABLES##############
@@ -130,6 +144,8 @@ class AstroCam:
         print("Started processing worker")
         future = self.processExecutor.submit(loadImageHisto, *params)
         future.add_done_callback(lambda f: self.root.after(100, self.loadingDone, f.result()))
+        # Skip image loading  
+        #  self.loadingDone(None)
 
     def startWorker(self):
         self.imageFilename = None
@@ -235,20 +251,21 @@ class AstroCam:
 
 if __name__ == "__main__":
 
-    # destDir = "C:\\src\\pics"
-    # cam = Camera(1, b"C:\\src\\pics")
-    # def snapFn(iso, exp):
-    #     cam.setISO(iso)
-    #     imgNo = cam.takePicture(exp)
-    #     return f"{destDir}\\Image{imgNo:03d}.nef"
+    destDir = "C:\\src\\pics"
+    cam = Camera(1, b"C:\\src\\pics")
+    def snapFn(iso, exp):
+        cam.setISO(iso)
+        imgNo = cam.takePicture(exp)
+        print(f"Got file: {destDir}\\Image{imgNo:03d}.nef")
+        return f"{destDir}\\Image{imgNo:03d}.nef"
 
     def testSnapFn(iso,exp):
         print(f"Snap: iso-{iso} - {exp} secs")
-        time.sleep(exp)
-        return "sample.nef"
+        # time.sleep(exp)
+        return f"{destDir}\\Image045.nef"
 
     with ProcessPoolExecutor() as processExecutor, ThreadPoolExecutor() as threadExecutor:
-        astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), testSnapFn, threadExecutor, processExecutor) #snapFn)
+        astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), snapFn, threadExecutor, processExecutor) #snapFn)
         astroCam.setupControlBoard()
         astroCam.setupTestStart()
         astroCam.root.mainloop()
