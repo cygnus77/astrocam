@@ -3,7 +3,9 @@ import tkinter
 import rawpy
 from PIL import Image, ImageTk
 import time
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Future
+from multiprocessing import Process, Queue
+import queue
+from threading import Thread
 
 from argparse import ArgumentParser
 
@@ -11,7 +13,68 @@ from CameraAPI.CameraAPI import Camera
 
 DEFAULT_NUM_EXPS = 5
 
+class DummySnapProcess(Process):
+    def __init__(self, cameraModel, numShots, iso, exp, output_queue, destDir):
+        super().__init__()
+        self.numbShots = numShots
+        self.exp = exp
+        self.output_queue = output_queue
+        self.destDir = destDir
+
+    def run(self):
+        try:
+            imgNo = 1
+            for i in range(self.numbShots):
+                time.sleep(self.exp)
+                self.output_queue.put(f"{self.destDir}\\Image{imgNo:03d}.nef")
+                if i == 1:
+                    raise RuntimeError()
+            self.output_queue.put(None)
+        finally:
+            try:
+                self.output_queue.put(None)
+            except:
+                pass
+
+class SnapProcess(Process):
+    def __init__(self, cameraModel, iso, exp, input_queue, output_queue, destDir):
+        super().__init__()
+        self.cameraModel = cameraModel
+        self.iso = iso
+        self.exp = exp
+        self.input_queue = input_queue
+        self.output_queue = output_queue
+        self.destDir = destDir
+
+    def run(self):
+        cam = None
+        try:
+            cam = Camera(self.cameraModel, bytes(self.destDir, 'ascii'))
+
+            while self.input_queue.get(block=False):
+                cam.setISO(self.iso)
+                imgNo = cam.takePicture(self.exp)
+                if imgNo >= 0:
+                    self.output_queue.put(f"{self.destDir}\\Image{imgNo:03d}.nef")
+                else:
+                    break
+        except queue.Empty:
+            pass
+        finally:
+            try:
+                self.output_queue.put(None)
+            except:
+                pass
+            try:
+                if cam is not None:
+                    cam.close()
+            except:
+                pass
+
+
 def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight):
+    if imageFilename is None:
+        return None
     raw = rawpy.imread(imageFilename)
     print(f"Postprocessing {imageFilename}")
     params = rawpy.Params(demosaic_algorithm = rawpy.DemosaicAlgorithm.AHD,
@@ -65,19 +128,20 @@ def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, h
 
 
 class AstroCam:
-    def __init__(self, windowWidth, windowHeight, snapFn, threadExecutor, processExecutor):
+    def __init__(self, windowWidth, windowHeight, cameraModel, destDir):
         self.root = tkinter.Tk()
         self.root.geometry(f"{windowWidth+20}x{windowHeight+20}")
-        self.snapFn = snapFn
+        self.root.state("zoomed")
+        self.cameraModel = cameraModel
+        self.destDir = destDir
         self.textVar=tkinter.StringVar()
         self.runningExposures = 0
         self.cancelJob = False
         self.imageFilename = None
-        self.threadExecutor = threadExecutor
-        self.processExecutor = processExecutor
+        self.image_queue = Queue(1000)
+        self.req_queue = Queue(1000)
 
-
-        self.isoNumbers=["640","800","1600","2000","2500","3200","5000","6400","8000", "12800"]
+        self.isoNumbers=["200", "640","800", "1000", "1600","2000","2500","3200","5000","6400","8000", "12800"]
         self.expTimes=[1./256, 1./128,1./64,1./32,1./16,0.125,0.25,0.5,1, 5,10,30,60,90,120,150,180,240,300]
 
         ##############VARIABLES##############
@@ -110,7 +174,6 @@ class AstroCam:
 
         self.parentFrame.pack(expand=False)
 
-
     def startExps(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
@@ -118,7 +181,8 @@ class AstroCam:
         self.startWorker()
 
     def takeSnapshot(self):
-        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")        
+        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
+        self.exposure_number.set(1)
         self.startWorker()
 
     def endRunningExposures(self, msg):
@@ -129,27 +193,19 @@ class AstroCam:
         self.snapshotBtn["state"] = "normal"
 
     def loadingDone(self, params):
-        self.textVar.set("Loaded image")
-        
+
         if self.runningExposures:
             if self.cancelJob:
                 self.endRunningExposures("Cancelled")
-            elif self.exposure_number.get() > 0:
-                self.exposure_number.set(self.exposure_number.get() - 1)
-                self.startWorker()
             else:
+                self.exposure_number.set(self.exposure_number.get() - 1)
+            if self.exposure_number.get() == 0:
                 self.endRunningExposures("Finished")
         else:
             self.endRunningExposures("Finished")
 
-        self.showImageHisto(*params)
-
-    def processLoadImage(self, params):
-        print("Started processing worker")
-        future = self.processExecutor.submit(loadImageHisto, *params)
-        future.add_done_callback(lambda f: self.root.after(100, self.loadingDone, f.result()))
-        # Skip image loading  
-        #  self.loadingDone(None)
+        if params is not None:
+            self.showImageHisto(*params)
 
     def startWorker(self):
         self.imageFilename = None
@@ -159,27 +215,74 @@ class AstroCam:
         imgCanvasWidth, imgCanvasHeight = int(self.imageCanvas["width"]), int(self.imageCanvas["height"])
         histoWidth, histoHeight = int(self.histoCanvas["width"]), int(self.histoCanvas["height"])
 
-        print("Started capture worker")
-        self.threadExecutor.submit(lambda iso,exp: self.snapFn(iso,exp), self.iso_number.get(), self.exp_time.get()).add_done_callback(
-            lambda f: self.root.after(100, self.processLoadImage, (f.result(), imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight))
-        )
+        try:
+            while not self.req_queue.empty():
+                self.req_queue.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            for _ in range(self.exposure_number.get()):
+                self.req_queue.put(1)
+        except queue.Full:
+            pass
+
+        def threadProc(iso, exp):
+            snapProc = SnapProcess(self.cameraModel, iso, exp, self.req_queue, self.image_queue, self.destDir)
+            snapProc.start()
+
+            while not self.cancelJob:
+                fname = self.image_queue.get()
+                if fname == None:
+                    if self.req_queue.empty():
+                        break # done
+                    else:
+                        while snapProc.is_alive():
+                            time.sleep(1)
+                        print("Restarting camera proc")
+                        self.snapProc = SnapProcess(self.cameraModel, iso, exp, self.req_queue, self.image_queue, self.destDir)
+                        self.snapProc.start()
+                else:
+                    data = loadImageHisto(fname, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
+                    self.loadingDone(data)
+
+        Thread(target=threadProc, args=[self.iso_number.get(), self.exp_time.get()]).start()
 
     def cancel(self):
         self.cancelJob = True
+        try:
+            while not self.req_queue.empty():
+                self.req_queue.get_nowait()
+        except queue.Empty:
+            pass
 
     def exp_number_up(self):
         expnum=self.exposure_number.get()
         if expnum < 5:
-            self.exposure_number.set(5)
+            newexp = 5
         else:
-            self.exposure_number.set(expnum+5)
+            newexp = expnum + 5
+        self.exposure_number.set(newexp)
+        if self.runningExposures:
+            try:
+                for i in range(newexp-expnum):
+                    self.req_queue.put(1, block=False)
+            except queue.Full:
+                pass
 
     def exp_number_down(self):
         expnum=self.exposure_number.get()
         if expnum <= 5:
-            self.exposure_number.set(5)
+            newexp = 5
         else:
-            self.exposure_number.set(expnum-5)
+            newexp = expnum - 5
+        self.exposure_number.set(newexp)
+        if self.runningExposures:
+            try:
+                for i in range(expnum-newexp):
+                    self.req_queue.get_nowait(1)
+            except queue.Empty:
+                pass
+
 
     def onIsoSelected(self):
         isoStr = str(self.iso_number.get())
@@ -266,24 +369,12 @@ class AstroCam:
 if __name__ == "__main__":
 
     ap = ArgumentParser()
-    ap.add_argument("cameraModel", type=int, choices=[750, 5300])
+    ap.add_argument("cameraModel", type=int, choices=[90, 750, 5300])
     args = ap.parse_args()
 
     destDir = "C:\\src\\pics"
-    cam = Camera(args.cameraModel, b"C:\\src\\pics")
-    def snapFn(iso, exp):
-        cam.setISO(iso)
-        imgNo = cam.takePicture(exp)
-        print(f"Got file: {destDir}\\Image{imgNo:03d}.nef")
-        return f"{destDir}\\Image{imgNo:03d}.nef"
 
-    def testSnapFn(iso,exp):
-        print(f"Snap: iso-{iso} - {exp} secs")
-        # time.sleep(exp)
-        return f"{destDir}\\Image045.nef"
-
-    with ProcessPoolExecutor() as processExecutor, ThreadPoolExecutor() as threadExecutor:
-        astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), snapFn, threadExecutor, processExecutor) #snapFn)
-        astroCam.setupControlBoard()
-        astroCam.setupTestStart()
-        astroCam.root.mainloop()
+    astroCam = AstroCam(int(1920/1.25), int((1080-100)/1.25), args.cameraModel, destDir)
+    astroCam.setupControlBoard()
+    astroCam.setupTestStart()
+    astroCam.root.mainloop()

@@ -19,7 +19,7 @@
             "program": "${workspaceFolder}/astrocam.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
-            "args": ["5300"]
+            "args": ["90"]
         }
     ]
 }

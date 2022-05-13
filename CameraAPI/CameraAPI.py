@@ -5,6 +5,8 @@ lib = ctypes.windll.LoadLibrary(r"C:\src\astrocam\CameraAPI\x64\Release\CameraAP
 class Camera(object):
     def __init__(self, cameraModel, destDir=None):
 
+        self.cameraModel = cameraModel
+        self.destDir = destDir
         if cameraModel == 750:
             self.iso_map = {
                 "LO-1": 0,
@@ -37,6 +39,22 @@ class Camera(object):
                 "Hi-1.0": 27,
                 "Hi-2.0": 28
             }
+        elif cameraModel == 90:
+            self.iso_map = {
+                "200": 3,
+                "250": 4,
+                "320": 5,
+                "400": 6,
+                "500": 7,
+                "640": 8,
+                "800": 9,
+                "1000": 10,
+                "1250": 11,
+                "1600": 12,
+                "2000": 13,
+                "2500": 14,
+                "3200": 15,
+			}
         elif cameraModel == 5300:
             self.iso_map = {
                 "100": 0,

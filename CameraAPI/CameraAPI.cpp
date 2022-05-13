@@ -20,10 +20,65 @@ class CameraAPI
 {
 public:
 	CameraAPI(int cameraModel) {
-		char	ModulePath[MAX_PATH];
+		char	ModulePath[MAX_PATH] = { 0 };
 		ULONG	ulModID = 0;
 		const char* mdFile = nullptr;
-		if (cameraModel == 5300) {
+
+		if (cameraModel == 90) {
+			mdFile = "\\Type0003.md3";
+			this->BulbMode = 0;
+			this->isShutterRelease = TRUE;
+
+			this->m_hCommPort = ::CreateFile("COM5",
+				GENERIC_WRITE | GENERIC_READ,  // access ( read and write)
+				0,                           // (share) 0:cannot share the
+											 // COM port
+				0,                           // security  (None)
+				OPEN_EXISTING,               // creation : open_existing
+				0,        // we want overlapped operation
+				0                            // no templates file for
+											 // COM port...
+			);
+
+			DWORD err = GetLastError();
+			if (err) {
+				printf("Error: %d", err);
+				throw new runtime_error("Unable to open COM 7\n");
+			}
+
+			COMMTIMEOUTS commTimeouts;
+			commTimeouts.ReadIntervalTimeout = 0;
+			commTimeouts.ReadTotalTimeoutConstant = 250;
+			commTimeouts.ReadTotalTimeoutMultiplier = 250;
+			commTimeouts.WriteTotalTimeoutConstant = 250;
+			commTimeouts.WriteTotalTimeoutMultiplier = 50;
+			SetCommTimeouts(this->m_hCommPort, &commTimeouts);
+
+			DCB dcb = { 0 };
+			dcb.DCBlength = sizeof(DCB);
+
+			if (!::GetCommState(this->m_hCommPort, &dcb))
+			{
+				printf("CSerialCommHelper : Failed to Get Comm State Reason: %d",
+					GetLastError());
+			}
+
+			dcb.BaudRate = 57600;
+			dcb.fDtrControl = 1;
+			dcb.fTXContinueOnXoff = 1;
+			dcb.ByteSize = 8;
+
+			if (!::SetCommState(this->m_hCommPort, &dcb))
+			{
+				printf("CSerialCommHelper : Failed to Set Comm State Reason: %d",
+					GetLastError());
+			}
+
+			if (closeShutter() != 0) {
+				throw new runtime_error("Arduino not responding!\n");
+			}
+		}
+		else if (cameraModel == 5300) {
 			mdFile = "\\Type0011.md3";
 			this->BulbMode = 1;
 		}
@@ -124,6 +179,182 @@ public:
 		//return setEnumProp(kNkMAIDCapability_Active_D_Lighting, kNkMAIDActive_D_Lighting_Off);
 	}
 
+	int commCommand(const char* cmd_letter, const char* expect, int len_expect) {
+		DWORD dwBytesWritten = 0;
+		char buff[10] = { 0 };
+		DWORD bytesRead = 0;
+		int retries = 10;
+		while (retries > 0) {
+			printf(">");
+			BOOL bRet = WriteFile(this->m_hCommPort, cmd_letter, 1, &dwBytesWritten, 0);
+			if (!bRet || dwBytesWritten != 1) {
+				printf("[Err1:%d, %x]", bRet, GetLastError());
+				Sleep(250);
+				retries--;
+				continue;
+			}
+
+			printf("<");
+			bRet = ReadFile(this->m_hCommPort, buff, len_expect, &bytesRead, NULL);
+			if (!bRet || bytesRead != len_expect) {
+				printf("[Err2:%d, %d, %x]", bRet, bytesRead, GetLastError());
+				Sleep(250);
+				retries--;
+				continue;
+			}
+			if (strncmp(expect, buff, len_expect) == 0) {
+				printf("\n");
+				break; // success
+			}
+		}
+		if (retries == 0) {
+			return -1;
+		}
+		return 0;
+	}
+
+	int openShutter() {
+		return commCommand("o", "open", 4);
+	}
+
+	int closeShutter() {
+		return commCommand("c", "closed", 6);
+	}
+
+	int takeShutterReleasePicture(float seconds) {
+
+		if (openShutter() != 0)
+			return -1;
+
+		// Sleep for exposure
+		Sleep((DWORD)(seconds * 1000));
+
+		if (closeShutter() != 0)
+			return -1;
+
+		LPNkMAIDObject pSourceObject = pRefSrc->pObject;
+		BOOL bRet;
+		ULONG ulItmID = 0;
+		int retries = 10;
+		// Poll for image availability
+		while (retries) {
+			NkMAIDEnum	stEnum;
+			bRet = Command_CapGet(pSourceObject, kNkMAIDCapability_Children, kNkMAIDDataType_EnumPtr, (NKPARAM)&stEnum, NULL, NULL);
+			if (bRet == false) {
+				return -1;
+			}
+
+			if (stEnum.ulElements == 0) {
+				retries--;
+				Sleep(1000);
+				continue;
+			}
+
+			// check the data of the capability.
+			if (stEnum.wPhysicalBytes != 4) return -1;
+			// allocate memory for array data
+			stEnum.pData = malloc(stEnum.ulElements * stEnum.wPhysicalBytes);
+			// get array data
+			if (Command_CapGetArray(pSourceObject, kNkMAIDCapability_Children, kNkMAIDDataType_EnumPtr, (NKPARAM)&stEnum, NULL, NULL) == FALSE) {
+				free(stEnum.pData);
+				return -1;
+			}
+
+			if (stEnum.ulElements == 0) {
+				retries--;
+				free(stEnum.pData);
+				Sleep(1000);
+				continue;
+			}
+			ulItmID = ((ULONG*)stEnum.pData)[0];
+			free(stEnum.pData);
+			break;
+		}
+
+		if (retries == 0)
+			return -1;
+
+		LPRefObj pRefItm = GetRefChildPtr_ID(pRefSrc, ulItmID);
+		if (pRefItm == NULL) {
+			// Create Item object and RefSrc structure.
+			if (AddChild(pRefSrc, ulItmID) == TRUE) {
+				printf("Item object is opened.\n");
+			}
+			else {
+				printf("Item object can't be opened.\n");
+				return -1;
+			}
+			pRefItm = GetRefChildPtr_ID(pRefSrc, ulItmID);
+		}
+
+		LPNkMAIDCapInfo pCapInfo2 = GetCapInfo(pRefItm, kNkMAIDCapability_DataTypes);
+		if (pCapInfo2 == NULL) {
+			return -1;
+		}
+
+		if (!CheckCapabilityOperation(pRefItm, kNkMAIDCapability_DataTypes, kNkMAIDCapOperation_Get))
+			return -1;
+
+		ULONG	ulDataTypes=0;
+		bRet = Command_CapGet(pRefItm->pObject, kNkMAIDCapability_DataTypes, kNkMAIDDataType_UnsignedPtr, (NKPARAM)&ulDataTypes, NULL, NULL);
+		if (bRet == FALSE)
+			return -1;
+
+		ULONG	dataType;
+		if ((ulDataTypes & kNkMAIDDataObjType_Image) == 0)
+			return -1;
+
+		// reset file removed flag
+		g_bFileRemoved = false;
+
+		LPRefObj pRefDat = GetRefChildPtr_ID(pRefItm, kNkMAIDDataObjType_Image);
+		if (pRefDat == NULL) {
+			// Create Image object and RefSrc structure.
+			if (AddChild(pRefItm, kNkMAIDDataObjType_Image) == TRUE) {
+				printf("Image object is opened.\n");
+			}
+			else {
+				printf("Image object can't be opened.\n");
+				return -1;
+			}
+			pRefDat = GetRefChildPtr_ID(pRefItm, kNkMAIDDataObjType_Image);
+		}
+
+		// set reference from DataProc
+		LPRefDataProc pRefDeliver = (LPRefDataProc)malloc(sizeof(RefDataProc));// this block will be freed in CompletionProc.
+		pRefDeliver->pBuffer = NULL;
+		pRefDeliver->ulOffset = 0L;
+		pRefDeliver->ulTotalLines = 0L;
+		pRefDeliver->lID = pRefItm->lMyID;
+		// set reference from CompletionProc
+		ULONG ulCount = 0L;
+		LPRefCompletionProc pRefCompletion = (LPRefCompletionProc)malloc(sizeof(RefCompletionProc));// this block will be freed in CompletionProc.
+		pRefCompletion->pulCount = &ulCount;
+		pRefCompletion->pRef = pRefDeliver;
+		// set reference from DataProc
+		NkMAIDCallback	stProc;
+		stProc.pProc = (LPNKFUNC)DataProc;
+		stProc.refProc = (NKREF)pRefDeliver;
+
+		// set DataProc as data delivery callback function
+		if (CheckCapabilityOperation(pRefDat, kNkMAIDCapability_DataProc, kNkMAIDCapOperation_Set) &&
+			Command_CapSet(pRefDat->pObject, kNkMAIDCapability_DataProc, kNkMAIDDataType_CallbackPtr, (NKPARAM)&stProc, NULL, NULL) &&
+			// start getting an image
+			Command_CapStart(pRefDat->pObject, kNkMAIDCapability_Acquire, (LPNKFUNC)CompletionProc, (NKREF)pRefCompletion, NULL)) {
+
+			IdleLoop(pRefDat->pObject, &ulCount, 1);
+		}
+		// reset DataProc
+		if (!Command_CapSet(pRefDat->pObject, kNkMAIDCapability_DataProc, kNkMAIDDataType_Null, (NKPARAM)NULL, NULL, NULL)) return -1;
+
+		if (pRefItm != NULL) {
+			// If the item object remains, close it and remove from parent link.
+			RemoveChild(pRefSrc, ulItmID);
+		}
+
+		return g_fileNo;
+	}
+
 	int takePicture(float seconds) {
 
 		ULONG	ulCount = 0L;
@@ -208,7 +439,7 @@ public:
 		ULONG	ulDataTypes;
 		if (!Command_CapGet(pRefItm->pObject, kNkMAIDCapability_DataTypes, kNkMAIDDataType_UnsignedPtr, (NKPARAM)&ulDataTypes, NULL, NULL)) return -1;
 		ULONG	dataType;
-		if (ulDataTypes & kNkMAIDDataObjType_Image == 0) return -1;
+		if ((ulDataTypes & kNkMAIDDataObjType_Image) == 0) return -1;
 
 		// reset file removed flag
 		g_bFileRemoved = false;
@@ -261,26 +492,42 @@ public:
 		return g_fileNo;
 	}
 
-	virtual ~CameraAPI() {
-		// Close Source_Object
-		RemoveChild(pRefMod, ulSrcID);
+	void close() {
+		if (pRefMod) {
+			// Close Source_Object
+			RemoveChild(pRefMod, ulSrcID);
 
-		// Close Module_Object
-		Close_Module(pRefMod);
+			// Close Module_Object
+			Close_Module(pRefMod);
+		}
 		FreeLibrary(g_hInstModule);
 		g_hInstModule = NULL;
 		// Free memory blocks allocated in this function.
-		if (pRefMod->pObject != NULL)
+		if (pRefMod->pObject != NULL) {
 			free(pRefMod->pObject);
-		if (pRefMod != NULL)
+			pRefMod->pObject = NULL;
+		}
+		if (pRefMod != NULL) {
 			free(pRefMod);
+			pRefMod = NULL;
+		}
+		if (m_hCommPort != 0) {
+			::CloseHandle(m_hCommPort);
+			m_hCommPort = 0;
+		}
 	}
 
+	virtual ~CameraAPI() {
+		close();
+	}
+
+	BOOL isShutterRelease = FALSE;
 private:
 	LPRefObj pRefMod;
 	LPRefObj pRefSrc;
 	ULONG ulSrcID;
 	int BulbMode = 2;
+	HANDLE m_hCommPort = 0;
 };
 
 extern "C" {
@@ -304,10 +551,16 @@ extern "C" {
 	}
 
 	__declspec(dllexport) int takePicture(CameraAPI* cd, float seconds) {
-		return cd->takePicture(seconds);
+		if (cd->isShutterRelease) {
+			return cd->takeShutterReleasePicture(seconds);
+		}
+		else {
+			return cd->takePicture(seconds);
+		}
 	}
 
 	__declspec(dllexport) bool close(CameraAPI* cd) {
+		cd->close();
 		delete cd;
 		return true;
 	}
@@ -315,18 +568,18 @@ extern "C" {
 
 int main()
 {
-	CameraAPI* cam = getCameraAPI(5300);
+	CameraAPI* cam = getCameraAPI(90);
 
 	if (!open(cam, 1, "C:\\src\\pics")) {
 		cout << "Cam setup failed" << endl;
 		return -1;
 	}
 
-	cam->setISO(3);
+	setISO(cam, 12);
 
 	for (int i = 0; i < 2; i++) {
 
-		cout << "Image: " << cam->takePicture(1) << endl;
+		cout << "Image: " << takePicture(cam, 5) << endl;
 
 		cout << "Happy Birthday ADITYA !" << endl;
 	}
