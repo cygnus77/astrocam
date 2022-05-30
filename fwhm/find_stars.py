@@ -2,6 +2,7 @@ from json import load
 import rawpy
 import numpy as np
 import cv2
+from sympy import root
 
 class StarFinder():
   def __init__(self) -> None:
@@ -14,6 +15,8 @@ class StarFinder():
     self.Bm[d:d+Bmi.shape[0], d:d+Bmi.shape[0]] -= Bmi
    
   def find_stars(self, gray: np.ndarray):
+    img_height = gray.shape[0]
+    img_width = gray.shape[1]
     K = cv2.morphologyEx(gray, cv2.MORPH_OPEN, self.Bs)
     N = cv2.morphologyEx(cv2.morphologyEx(gray, cv2.MORPH_DILATE, self.Bm), cv2.MORPH_ERODE, self.Be)
     R = K - np.minimum(K,N)
@@ -21,27 +24,41 @@ class StarFinder():
 
     bboxes = []
     for staridx in range(numstars):
-      centorid_x, centroid_y = centroids[staridx]
+      centroid_x, centroid_y = centroids[staridx]
       width = stats[staridx, cv2.CC_STAT_WIDTH]
       height = stats[staridx, cv2.CC_STAT_HEIGHT]
-      min_row = int(max(0, centroid_y - height))
-      max_row = int(min(gray.shape[0], centroid_y + height+1))
-      min_col = int(max(0, centorid_x - width))
-      max_col = int(min(gray.shape[1], centorid_x + width+1))
+      min_row = int(max(0, centroid_y - height / 2))
+      max_row = int(min(img_height, centroid_y + (height / 2) + 1))
+      min_col = int(max(0, centroid_x - width / 2))
+      max_col = int(min(img_width, centroid_x + (width / 2) + 1))
+
+      def tile(tile_size):
+        tiles_per_row = int((img_width + tile_size - 1) / tile_size)
+        tile_x = round(centroid_x / tile_size)
+        tile_y = round(centroid_y / tile_size)
+        tile_no = tile_x + tile_y * tiles_per_row
+        return tile_no
+
       #star = gray[min_row:max_row, min_col:max_col]
       #stars.append(star)
       bboxes.append({'area':stats[staridx, cv2.CC_STAT_AREA],
-                     'centroid':[centorid_x, centroid_y],
-                     'box':[min_col, min_row, max_col, max_row]})
+                     'centroid':[centroid_x, centroid_y],
+                     'box':[min_col, min_row, max_col, max_row],
+                     'tile_4': tile(4),
+                     'tile_16': tile(16),
+                     'tile_32': tile(32),
+                    })
 
-    return bboxes
+    return R, bboxes
 
   def getStarData(self, fname):
     with open(fname, "rb") as f:
       rawimg = rawpy.imread(f)
       img = rawimg.postprocess()
       img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-      return self.find_stars(img)
+      star_img, bboxes = self.find_stars(img)
+      return {  "image": star_img, 
+                "stars": bboxes,}
 
 if __name__ == "__main__":
   out_of_focus = r"D:\Astro\20220430-whale\outoffocus\Image741.nef"
