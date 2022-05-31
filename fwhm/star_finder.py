@@ -2,6 +2,7 @@ import rawpy
 import numpy as np
 import cv2
 from tqdm import tqdm
+import pandas as pd
 from fwhm import getFWHM_GaussianFitScaledAmp
 
 class StarFinder():
@@ -51,7 +52,9 @@ class StarFinder():
                      'fwhm_y': fwhm_y,
                     })
 
-    return R, bboxes
+    df = pd.DataFrame(bboxes)
+    df.drop(0, axis=0, inplace=True)
+    return R, df
 
   def getStarData(self, fname):
     with open(fname, "rb") as f:
