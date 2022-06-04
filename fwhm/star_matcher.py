@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from itertools import combinations, product
 import math
+from tqdm import tqdm
 
 class StarMatcher:
 
@@ -14,10 +15,10 @@ class StarMatcher:
         tri_tgt = self._getTriangles(df_tgt)
 
         # Collect triangle match counts
-        TRIANGLETOLERANCE = 1e-4
+        TRIANGLETOLERANCE = 2e-4
         votes = np.zeros((len(df_ref)+1, len(df_tgt)+1), dtype=np.uint32)
 
-        for tgt in tri_tgt.itertuples():
+        for tgt in tqdm(tri_tgt.itertuples(), desc="Matching triangles", total=len(tri_tgt)):
             ref_matches = tri_ref[(tri_ref.fX >= tgt.fX) & (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE)]
             ref_matches = ref_matches[(ref_matches.fX-tgt.fX)**2 + (ref_matches.fY-tgt.fY)**2 < TRIANGLETOLERANCE**2]
             for ref in ref_matches.itertuples():
@@ -30,7 +31,7 @@ class StarMatcher:
         # Select only those votes that are higher than a treshold
         x,y = vVotingPairs[len(df_tgt)]
         cutoff = max(1, votes[x,y])
-        print(f"Vote cutoff threshold: {cutoff}")
+        # print(f"Vote cutoff threshold: {cutoff}")
         topVotePairs = list(filter(lambda r: votes[r[0],r[1]] > cutoff, vVotingPairs))
 
         matches = []
@@ -48,6 +49,8 @@ class StarMatcher:
         matches_tgt = df_tgt[df_tgt.index.isin(matches_tgt)].reset_index()
 
         frames = pd.merge(left=matches_ref, right=matches_tgt, left_index=True, right_index=True, suffixes=["_ref", "_tgt"])
+        frames['fwhm_x_diff'] = frames.fwhm_x_ref - frames.fwhm_x_tgt
+        frames['fwhm_y_diff'] = frames.fwhm_y_ref - frames.fwhm_y_tgt
         return frames
 
     def _getTriangles(self, df):

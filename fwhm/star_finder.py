@@ -3,10 +3,12 @@ import numpy as np
 import cv2
 from tqdm import tqdm
 import pandas as pd
+import math
 from fwhm import getFWHM_GaussianFitScaledAmp
+from star_centroid import iwc_centroid
 
 class StarFinder():
-  def __init__(self) -> None:
+  def __init__(self):
     self.Bs = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(7,7))
     Bmi = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(21,21))
     self.Be = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(25,25))
@@ -14,7 +16,7 @@ class StarFinder():
     d = (Bmo.shape[0] - Bmi.shape[0]) // 2
     self.Bm = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(29,29))
     self.Bm[d:d+Bmi.shape[0], d:d+Bmi.shape[0]] -= Bmi
-   
+
   def find_stars(self, gray: np.ndarray):
     img_height = gray.shape[0]
     img_width = gray.shape[1]
@@ -23,9 +25,19 @@ class StarFinder():
     R = K - np.minimum(K,N)
     numstars, labels, stats, centroids = cv2.connectedComponentsWithStats(R, 4, cv2.CV_16U, cv2.CCL_WU)
 
+    # Fixed star area
+    # width = 19
+    # height = 19
+    # Use maximum area for all stars
+    # for staridx in range(1, numstars):
+    #   width = max(width, stats[staridx, cv2.CC_STAT_WIDTH])
+    #   height = max(height, stats[staridx, cv2.CC_STAT_HEIGHT])
+    # print(f"Star dim: {width}, {height}")
+
     bboxes = []
-    for staridx in tqdm(range(1, numstars)):
+    for staridx in tqdm(range(1, numstars), desc="Calculating FWHM"):
       centroid_x, centroid_y = centroids[staridx]
+      # Per-star area
       width = stats[staridx, cv2.CC_STAT_WIDTH]
       height = stats[staridx, cv2.CC_STAT_HEIGHT]
       min_row = int(max(0, centroid_y - (height/2)))
@@ -33,6 +45,8 @@ class StarFinder():
       min_col = int(max(0, centroid_x - (width/2)))
       max_col = int(min(img_width, centroid_x + (width/2)+1))
       star = gray[min_row:max_row, min_col:max_col]
+      # Recalculate centroid
+      iwc_cx, iwc_cy = iwc_centroid(star)
 
       def tile(tile_size):
         tiles_per_row = int((img_width + tile_size - 1) / tile_size)
@@ -41,10 +55,14 @@ class StarFinder():
         tile_no = tile_x + tile_y * tiles_per_row
         return tile_no
 
-      fwhm_x, fwhm_y = getFWHM_GaussianFitScaledAmp(star)
+      fwhm_x, fwhm_y, curve_cx, curve_cy = getFWHM_GaussianFitScaledAmp(star)
       bboxes.append({'area':stats[staridx, cv2.CC_STAT_AREA],
-                     'centroid_x':centroid_x,
-                     'centroid_y': centroid_y,
+                     'cluster_cx': centroid_x,
+                     'cluster_cy': centroid_y,
+                     'iwc_cx': iwc_cx,
+                     'iwc_cy': iwc_cy,
+                     'gaussian_cx': curve_cx,
+                     'gaussian_cy': curve_cy,
                      'box':[min_col, min_row, max_col, max_row],
                      'tile_4': tile(4),
                      'tile_32': tile(32),
@@ -53,7 +71,6 @@ class StarFinder():
                     })
 
     df = pd.DataFrame(bboxes)
-    df.drop(0, axis=0, inplace=True)
     return R, df
 
   def getStarData(self, fname):

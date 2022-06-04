@@ -5,7 +5,7 @@ def twoD_GaussianScaledAmp(pos, xo, yo, sigma_x, sigma_y, amplitude, offset):
     """Function to fit, returns 2D gaussian function as 1D array"""
     x,y = pos
     xo = float(xo)
-    yo = float(yo)    
+    yo = float(yo)
     g = offset + amplitude*np.exp( - (((x-xo)**2)/(2*sigma_x**2) + ((y-yo)**2)/(2*sigma_y**2)))
     return g.ravel()
 
@@ -26,10 +26,11 @@ def getFWHM_GaussianFitScaledAmp(img, ax=None):
     # subtract background and rescale image into [0,1], with floor clipping
     bg = np.percentile(img,5)
     img = np.clip((img - bg) / (img.max() - bg),0,1)
+
     popt, pcov = opt.curve_fit(twoD_GaussianScaledAmp, (x, y), 
                               img.ravel(), p0=None, #initial_guess,
                               bounds = (
-                                  (0.0, 0.0, 1, 1, 0.5, -0.1), # Lower bound
+                                  (0, 0, 1, 1, 0.5, -0.1), # Lower bound
                                   (img.shape[1], img.shape[0], img.shape[1], img.shape[0], 1.5, 0.5) # Upper bound
                                 )
                             )
@@ -41,4 +42,4 @@ def getFWHM_GaussianFitScaledAmp(img, ax=None):
 
     FWHM_x = np.abs(4*sigmaX*np.sqrt(-0.5*np.log(0.5)))
     FWHM_y = np.abs(4*sigmaY*np.sqrt(-0.5*np.log(0.5)))
-    return (FWHM_x, FWHM_y)
+    return (FWHM_x, FWHM_y, xcenter, ycenter)
