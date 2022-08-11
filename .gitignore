@@ -7,3 +7,5 @@ CameraAPI/__pychache__/*
 *.nef
 *.suo
 *.pyc
+dataset/
+weights/
