@@ -1,3 +1,4 @@
+from lzma import MF_BT2
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -10,6 +11,7 @@ import cairo
 from random import random, choice
 from pathlib import Path
 from itertools import product
+import mlflow
 
 class DebayerModel(nn.Module):
 
@@ -53,42 +55,51 @@ def train(net, trainloader, testloader, weights_dir: Path):
   criterion = nn.L1Loss(reduction='sum')
   optimizer = optim.Adam(net.parameters())
 
-  for epoch in range(50):  # loop over the dataset multiple times
+  with mlflow.start_run(run_name="Debayer", description="Debayer image to RGB"):
 
-    running_loss = 0.0
-    mini_batch = 20
-    for i, data in enumerate(trainloader, 0):
-        # get the inputs; data is a list of [inputs, labels]
-        inputs, labels = data
+    for epoch in range(20):  # loop over the dataset multiple times
 
-        # zero the parameter gradients
-        optimizer.zero_grad()
+      running_loss = 0.0
+      mini_batch = 20
+      for i, data in enumerate(trainloader, 0):
+          # get the inputs; data is a list of [inputs, labels]
+          inputs, labels = data
 
-        # forward + backward + optimize
-        outputs = net(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+          # zero the parameter gradients
+          optimizer.zero_grad()
 
-        # print statistics
-        running_loss += loss.item()
-        if i % mini_batch == mini_batch-1:    # print every 2000 mini-batches
-            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / mini_batch:.3f}')
+          # forward + backward + optimize
+          outputs = net(inputs)
+          loss = criterion(outputs, labels)
+          loss.backward()
+          optimizer.step()
+
+          # print statistics
+          running_loss += loss.item()
+          if i % mini_batch == mini_batch-1:    # print every 2000 mini-batches
+            train_loss = running_loss / mini_batch
+            print(f'[{epoch + 1}, {i + 1:5d}] loss: {train_loss:.3f}')
+            mlflow.log_metric("train_loss", train_loss)
             running_loss = 0.0
 
-    torch.save(net.state_dict(), weights_dir / f"weights_{epoch:05d}.pth")
+      model_path = weights_dir / f"weights_{epoch:05d}.pth"
+      torch.save(net.state_dict(), model_path)
 
-    total_loss = 0
-    with torch.no_grad():
-      for data in testloader:
-          images, labels = data
-          outputs = net(images)
-          loss = criterion(outputs, labels)
-          total_loss += loss
+      total_loss = 0
+      with torch.no_grad():
+        for data in testloader:
+            images, labels = data
+            outputs = net(images)
+            loss = criterion(outputs, labels)
+            total_loss += loss
 
-      print(f'Ave test loss: {total_loss / len(testloader)} %')
+        test_loss = total_loss / len(testloader)
+        print(f'Ave test loss: {test_loss:.3f} %')
+        mlflow.log_metric("test_loss", test_loss)
 
-  print('Finished Training')
+    mlflow.log_artifacts(weights_dir)
+    mlflow.log_artifact(__file__)
+    print('Finished Training')
 
 
 class RRGBDataGenetator(Dataset):
@@ -182,6 +193,7 @@ if __name__ == "__main__":
   dm = DebayerModel('cuda')
   dm.train(True)
   dm.to('cuda')
+  
   train(dm, trainloader, testloader, weights_dir = Path("weights"))
 
 
