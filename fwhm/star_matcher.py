@@ -59,8 +59,8 @@ class StarMatcher:
         for c in combinations(df.index, 2):
             assert(c[1] > c[0])
             key = (c[0], c[1])
-            x1, y1 = df.loc[c[0],['centroid_x', 'centroid_y']]
-            x2, y2 = df.loc[c[1],['centroid_x', 'centroid_y']]
+            x1, y1 = df.loc[c[0],['cluster_cx', 'cluster_cy']]
+            x2, y2 = df.loc[c[1],['cluster_cx', 'cluster_cy']]
             starDistances[key] = math.sqrt((x2-x1)**2 + (y2-y1)**2)
 
         vTriangles = []

@@ -5,10 +5,10 @@ from struct import unpack
 from subprocess import IDLE_PRIORITY_CLASS
 import tempfile
 import time
-from typing import Any
+import typing as T
 from xml.dom import NotFoundErr
 import requests
-from astropy.io import fits
+
 
 class ASCOMImageArrayElementTypes(IntEnum):
   Unknown = 0
@@ -36,7 +36,7 @@ class AscomDevice:
       try:
         if self._get('connected') == True:
           name = self._get('name')
-          if devNameKeyword in name:
+          if devNameKeyword.lower() in name.lower():
             self.name = name
             return
 
@@ -48,21 +48,23 @@ class AscomDevice:
     self.session.close()
     self.session = None
 
-  def _get(self, cmd: str) -> Any:
+  def _get(self, cmd: str, defaultVal = None) -> T.Any:
     r = self.session.get(f'{self.url_root}/{self.devno}/{cmd}', params={"ClientID": self.client_id})
     if r.status_code != 200:
       raise RuntimeError(r.status_code)
     data = r.json()
     if data['ErrorNumber'] != 0:
+      if data['ErrorNumber'] == 1024 or data['ErrorNumber'] == -2146233088: # NotImplemented
+        return defaultVal
       raise RuntimeError(data.ErrorMessage)
     return data['Value']
 
-  def _put(self, cmd: str, val: dict) -> Any:
+  def _put(self, cmd: str, val: dict) -> T.Any:
     data={"ClientID": self.client_id}
     data.update(val)
     r = self.session.put(f'{self.url_root}/{self.devno}/{cmd}', data=data)
     if r.status_code != 200:
-      raise RuntimeError(r.status_code)
+      raise RuntimeError(f"{r.status_code}: {r.content}")
     data = r.json()
     if data['ErrorNumber'] != 0:
       raise RuntimeError(data.ErrorMessage)
@@ -81,10 +83,9 @@ class AscomDevice:
 class Camera(AscomDevice):
   def __init__(self, name):
     super().__init__("camera", name)
-
-  @property
-  def temperature(self) -> float:
-    return self._get('ccdtemperature')
+    self._egain = self._get("electronsperadu")
+    self._pixelSize = [self._get("pixelsizex"), self._get("pixelsizey")]
+    self._sensortype = self._get("sensortype")
 
   class CameraState(IntEnum):
     IDLE = 0
@@ -96,7 +97,27 @@ class Camera(AscomDevice):
 
   @property
   def state(self) -> CameraState:
-    return self._get('camerastate')
+    return Camera.CameraState(self._get('camerastate'))
+
+  class SensorType(IntEnum):
+    MONO=0
+    RGB=1 # Colour not requiring Bayer decoding
+    RGGB=2
+    CMYG=3
+    CMYG2=4
+    LRGB=5
+
+  @property
+  def sensor_type(self) -> SensorType:
+    return Camera.SensorType(self._sensortype)
+
+  @property
+  def egain(self) -> float:
+    return self._egain
+
+  @property
+  def pixelSize(self) -> T.List[float]:
+    return self._pixelSize
 
   """ Thermal """
   @property
@@ -104,15 +125,46 @@ class Camera(AscomDevice):
     return self._get('cooleron')
 
   @property
+  def temperature(self) -> float:
+    return self._get('ccdtemperature')
+
+  @property
   def coolerpower(self) -> float:
     return self._get('coolerpower')
 
-  def coolto(self, tgt_tmp: float):
-    pass
+  @property
+  def set_temp(self) -> float:
+    return self._get('setccdtemperature')
 
-  def warmto(self, tgt_tmp: float):
-    pass
+  def _set_tgt_temp(self, tgt_temp):
+    self._put("setccdtemperature", {"SetCCDTemperature": tgt_temp})
 
+  def coolto(self, tgt_temp: float):
+    # Gradually cool
+    delta = self.temperature - tgt_temp
+    if not self.cooler:
+      self._put("cooleron", {"CoolerOn": True})
+    steps = 0
+    while delta > 3 and steps < 25:
+      self._set_tgt_temp(max(self.temperature - 3), tgt_temp)
+      time.sleep(4)
+      delta = self.temperature - tgt_temp
+      steps += 1
+    self._set_tgt_temp(tgt_temp)
+
+  def warmto(self, tgt_temp: float):
+    # Gradually cool
+    delta = tgt_temp - self.temperature
+    if not self.cooler:
+      self._put("cooleron", {"CoolerOn": True})
+    steps = 0
+    while delta > 3 and steps < 25:
+      self._set_tgt_temp(min(self.temperature + 3), tgt_temp)
+      time.sleep(4)
+      delta = tgt_temp - self.temperature
+      steps += 1
+    self._set_tgt_temp(tgt_temp)
+    self._put("cooleron", {"CoolerOn": False})
 
   """ Offset """
   @property
@@ -129,44 +181,53 @@ class Camera(AscomDevice):
 
   @property
   def gain(self) -> float:
-    return self._get('gain')
+    if not hasattr(self, '_gain'):
+      self._gain = self._get('gain')
+    return self._gain
 
   @gain.setter
   def gain(self, val):
     self._put('gain', {'Gain': val})
+    self._gain = val
 
 
   """ Offset """
   @property
   def offsetmin(self) -> float:
     if not hasattr(self, '_offsetmin'):
-      self._offsetmin = self._get('offsetmin')
+      self._offsetmin = self._get('offsetmin', 0)
     return self._offsetmin
 
   @property
   def offsetmax(self) -> float:
     if not hasattr(self, '_offsetmax'):
-      self._offsetmax = self._get('offsetmax')
+      self._offsetmax = self._get('offsetmax', 0)
     return self._offsetmax
 
   @property
   def offset(self) -> float:
-    return self._get('offset')
+    if not hasattr(self, '_offset'):
+      self._offset = self._get('offset', 0)
+    return self._offset
 
   @offset.setter
   def offset(self, val):
     self._put('offset', {'offset': val})
+    self._offset = val
 
 
   """ Binning """
   @property
   def binning(self) -> int:
-    return self._get('binx')
+    if not hasattr(self, '_bin'):
+      self._bin = self._get('binx')
+    return self._bin
 
   @binning.setter
   def binning(self, val: int):
     self._put('binx', {'BinX': val})
     self._put('biny', {'BinY': val})
+    self._bin = val
 
 
   """ Capture """ 
@@ -177,7 +238,7 @@ class Camera(AscomDevice):
   def imageready(self) -> bool:
     return self._get('imageready')
 
-  def getimage(self) -> str:
+  def downloadimage(self) -> str:
     url = f'{self.url_root}/{self.devno}/imagearray'
     with self.session.get(url, headers={'Accept': "application/imagebytes"}) as r:
       buffer = r.content
@@ -222,42 +283,28 @@ class Camera(AscomDevice):
       dt = np.dtype(baseType).newbyteorder('little')
       img = np.frombuffer(buffer[dataStart:], dtype=dt).reshape((dimension1, dimension2)).T
 
-      date_obs = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-      hdr = fits.Header(
-        {
-          'COMMENT': 'Anand Dinakar',
-          'OBJECT': self.objectName if self.objectName is not None else "Unk",
-          'INSTRUME': self.name,
-          'DATE-OBS': date_obs,
-          'CAMERA-DATE-OBS': date_obs,
-          'EXPTIME': exp_time,
-          'CCD-TEMP': c.temperature,
-          'BZERO': c.bzero, #32768,
-          'BSCALE': c.bscale, #1 ,
-          'XPIXSZ': c.pixelSize[0], #4.63,
-          'YPIXSZ': c.pixelSize[1], #4.63,
-          'XBINNING': binning,
-          'YBINNING': binning,
-          'XORGSUBF': 0,
-          'YORGSUBF': 0,
-          'EGAIN': c.egain, # 1.00224268436432,  # Electronic gain in e-/ADU.
-          'FOCALLEN': focal_length,
-          'JD': 2459795.74265046,
-          'SWCREATE': 'AstroCAM',
-          'SBSTDVER': 'SBFITSEXT Version 1.0',
-          'SNAPSHOT': 1,
-          'SET-TEMP': 0.0,
-          'IMAGETYP': 'Light Frame',
-          'SITELAT': '+40 51 55.000',
-          'SITELONG': '-74 20 42.000',
-          'GAIN': 120,
-          'OFFSET': 0,
-          'BAYERPAT': 'RGGB'
-        }
-      )
+      return img
 
-      hdu = fits.PrimaryHDU(img, header=hdr)
-      hdu.writeto('output.fits')
+
+class Focuser(AscomDevice):
+  def __init__(self, devNameKeyword: str):
+    super().__init__("focuser", devNameKeyword)
+
+  @property
+  def position(self):
+    return self._get("position")
+
+  def movein(self, steps):
+    pos = self._get("position")
+    pos -= steps
+    self._put("move", {"Position": pos})
+    return
+
+  def moveout(self, steps):
+    pos = self._get("position")
+    pos += steps
+    self._put("move", {"Position": pos})
+    return
 
 
 if __name__ == "__main__":
@@ -274,7 +321,7 @@ if __name__ == "__main__":
     print('waiting')
     time.sleep(1)
 
-  fname = c.getimage()
+  fname = c.downloadimage()
   print(fname)
 
   c.close()
