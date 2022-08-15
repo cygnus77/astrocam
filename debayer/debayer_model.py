@@ -15,12 +15,12 @@ import mlflow
 
 class DebayerModel(nn.Module):
 
-  def __init__(self, device='cpu') -> None:
+  def __init__(self, device='cpu', size=(200,200)) -> None:
     super().__init__()
 
-    r_m = np.zeros((200,200), dtype=np.float32)
-    g_m = np.zeros((200,200), dtype=np.float32)
-    b_m = np.zeros((200,200), dtype=np.float32)
+    r_m = np.zeros(size, dtype=np.float32)
+    g_m = np.zeros(size, dtype=np.float32)
+    b_m = np.zeros(size, dtype=np.float32)
 
     r_m[0::2, 0::2] = 1
     g_m[1::2, 0::2] = 1
