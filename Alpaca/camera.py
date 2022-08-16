@@ -56,7 +56,7 @@ class AscomDevice:
     if data['ErrorNumber'] != 0:
       if data['ErrorNumber'] == 1024 or data['ErrorNumber'] == -2146233088: # NotImplemented
         return defaultVal
-      raise RuntimeError(data.ErrorMessage)
+      raise RuntimeError(data['ErrorMessage'])
     return data['Value']
 
   def _put(self, cmd: str, val: dict) -> T.Any:
@@ -67,7 +67,7 @@ class AscomDevice:
       raise RuntimeError(f"{r.status_code}: {r.content}")
     data = r.json()
     if data['ErrorNumber'] != 0:
-      raise RuntimeError(data.ErrorMessage)
+      raise RuntimeError(data['ErrorMessage'])
 
   @property
   def connected(self) -> bool:
@@ -146,7 +146,15 @@ class Camera(AscomDevice):
       self._put("cooleron", {"CoolerOn": True})
     steps = 0
     while delta > 3 and steps < 25:
-      self._set_tgt_temp(max(self.temperature - 3), tgt_temp)
+      step_end = self.temperature - 1
+      self._set_tgt_temp(max(step_end, tgt_temp))
+
+      step_retry = 15
+      while (self.temperature > step_end or self.coolerpower > 60)and step_retry > 0:
+        time.sleep(1)
+        step_retry -= 1
+      
+      # Wait at this step
       time.sleep(4)
       delta = self.temperature - tgt_temp
       steps += 1
@@ -159,7 +167,15 @@ class Camera(AscomDevice):
       self._put("cooleron", {"CoolerOn": True})
     steps = 0
     while delta > 3 and steps < 25:
-      self._set_tgt_temp(min(self.temperature + 3), tgt_temp)
+      step_end = self.temperature + 1
+      self._set_tgt_temp(min(step_end, tgt_temp))
+
+      step_retry = 10
+      while self.temperature < step_end and step_retry > 0:
+        time.sleep(1)
+        step_retry -= 1
+
+      # Wait at this step
       time.sleep(4)
       delta = tgt_temp - self.temperature
       steps += 1

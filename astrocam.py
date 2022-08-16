@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 import sys
-import tkinter
+import tkinter as tk
 import rawpy
 from PIL import Image, ImageTk
 import time
@@ -188,18 +188,19 @@ def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, h
 
 class AstroCam:
     def __init__(self, cameraModel, destDir):
-        self.root = tkinter.Tk()
+        self.root = tk.Tk()
 
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
         #self.root.attributes('-fullscreen', True)
         self.root.geometry(f"{self.windowWidth}x{self.windowHeight}")
         self.root.bind("<Configure>", self.resize)
+        self.root.bind("<Key>", self.onkeypress)
         self.root.state("zoomed")
         self.camera = Camera(cameraModel)
-        self.camera = Focuser("focus")
+        self.focuser = Focuser("focus")
         self.destDir = destDir
-        self.expVar=tkinter.StringVar()
+        self.expVar=tk.StringVar()
         self.runningExposures = 0
         self.cancelJob = False
         self.imageFilename = None
@@ -209,8 +210,8 @@ class AstroCam:
         self.req_queue = Queue(1000)
         self.imageScale = 1.0
 
-        self.cameraTemp = tkinter.StringVar()
-        self.focuserPos = tkinter.StringVar()
+        self.cameraTemp = tk.StringVar()
+        self.focuserPos = tk.StringVar()
 
         self.info = {
             "object_name": "M31",
@@ -220,62 +221,101 @@ class AstroCam:
         }
 
         ##############VARIABLES##############
-        self.iso_number=tkinter.IntVar()
+        self.iso_number=tk.IntVar()
         self.iso_number.set(120)
-        self.exp_time=tkinter.DoubleVar()
+        self.exp_time=tk.DoubleVar()
         self.exp_time.set(1.0)
 
-        self.exposure_number=tkinter.IntVar()
+        self.exposure_number=tk.IntVar()
         self.exposure_number.set(DEFAULT_NUM_EXPS)
-        self.parentFrame=tkinter.Frame(self.root)
+        self.parentFrame=tk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
 
-        col0w = round(0.80 * self.windowWidth)
-        col1w = self.windowWidth - col0w
-        row0h = round(0.10 * self.windowHeight)
-        row1h = round(0.10 * self.windowHeight)
-        row2h = self.windowHeight - (row0h+row1h)
-
-        self.leftControlFrame=tkinter.Frame(self.parentFrame,height =row0h,width = col0w)
-        self.leftControlFrame.grid(row=0,column=0,sticky=tkinter.W)
-
-        self.histoCanvas=tkinter.Canvas(self.parentFrame,height=row0h+row1h, width=col1w, borderwidth=0, highlightthickness=0)
-        self.histoCanvas.grid(row=0,column=1,rowspan=2, sticky=tkinter.N)
-
-        self.imageCanvasFrame=tkinter.Frame(self.parentFrame,height=(row1h+row2h), width=col0w)
-        self.imageCanvasFrame.grid(row=1,column=0,rowspan=2,sticky=tkinter.W)
-
-        self.imageCanvas = tkinter.Canvas(self.imageCanvasFrame, height=(row1h+row2h), width=col0w, borderwidth=0, highlightthickness=0, scrollregion=(0,0,col0w,row1h+row2h))
-        self.hbar=tkinter.Scrollbar(self.imageCanvasFrame, orient=tkinter.HORIZONTAL)
-        self.hbar.pack(side=tkinter.BOTTOM, fill=tkinter.X)
+        self.imageCanvasFrame = tk.Frame(self.parentFrame)
+        
+        self.imageCanvas = tk.Canvas(self.imageCanvasFrame)
+        self.hbar=tk.Scrollbar(self.imageCanvasFrame, orient=tk.HORIZONTAL)
+        self.hbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.hbar.config(command=self.imageCanvas.xview)
-        self.vbar=tkinter.Scrollbar(self.imageCanvasFrame, orient=tkinter.VERTICAL)
-        self.vbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
+        self.vbar=tk.Scrollbar(self.imageCanvasFrame, orient=tk.VERTICAL)
+        self.vbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.vbar.config(command=self.imageCanvas.yview)
         self.imageCanvas.config(xscrollcommand=self.hbar.set, yscrollcommand=self.vbar.set)
-        self.imageCanvas.pack(side=tkinter.LEFT, expand=True, fill=tkinter.BOTH)
+        self.imageCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
 
-        self.rightControlFrame=tkinter.Frame(self.parentFrame,height=row2h, width=col1w)
-        self.rightControlFrame.grid(row=2,column=1,sticky=tkinter.E)
+        self.imageCanvasFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
 
-        self.parentFrame.pack(expand=False)
+
+        self.controlPanelFrame = tk.Frame(self.parentFrame)
+
+        self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=150, height=150, bg='black')
+        self.histoCanvas.pack(side=tk.TOP)
+
+        self.rightControlFrame = tk.Frame(self.controlPanelFrame)
+        self.setupFocuserThermo(self.rightControlFrame)
+        self.rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
+
+        self.leftControlFrame=tk.Frame(self.controlPanelFrame)
+        self.setupControlBoard(self.leftControlFrame)
+        self.leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
+
+        self.controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
+
+        self.parentFrame.pack(fill=tk.BOTH, expand=True)
+
+    def setupFocuserThermo(self, frame):
+        tempFrame = tk.Frame(frame)
+        tk.Button(tempFrame, text="Cool", command=self.coolCamera, width=5, height=3).pack(side=tk.LEFT, padx=5, pady=5)
+        tk.Label(tempFrame, textvariable=self.cameraTemp, width=10, height=3).pack(side=tk.LEFT, padx=5, pady=5)
+        tk.Button(tempFrame, text="Warm", command=self.warmCamera, width=5, height=3).pack(side=tk.LEFT, padx=5, pady=5)
+        tempFrame.pack(fill=tk.X, side=tk.TOP)
+
+        focusFrame = tk.Frame(frame)
+        tk.Label(focusFrame,textvariable=self.focuserPos).pack(side=tk.LEFT)
+        focusFrame.pack(fill=tk.X, side=tk.TOP)
+
+
+    def setupControlBoard(self, frame):
+
+        settingsFrame = tk.Frame(frame)
+
+        isoFrame = tk.Frame(settingsFrame)
+        tk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
+        tk.Entry(isoFrame, textvariable=self.iso_number).pack(side=tk.LEFT)
+        isoFrame.pack(fill=tk.X, side=tk.TOP)
+
+        shutterFrame = tk.Frame(settingsFrame)
+        tk.Label(shutterFrame,text="Shutter").pack(side=tk.LEFT)
+        tk.Entry(shutterFrame, textvariable=self.exp_time).pack(side=tk.LEFT)
+        shutterFrame.pack(fill=tk.X, side=tk.TOP)
+
+        expFrame = tk.Frame(settingsFrame)
+        tk.Button(expFrame,text="|\n|\nV",command=self.exp_number_down, width=5, height=3).pack(side=tk.LEFT)
+        tk.Label(expFrame,textvariable=self.exposure_number).pack(side=tk.LEFT)
+        tk.Button(expFrame,text="^\n|\n|",command=self.exp_number_up, width=5, height=3).pack(side=tk.LEFT)
+        expFrame.pack(fill=tk.X, side=tk.TOP)
+
+        settingsFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
+
+        controlFrame = tk.Frame(frame)
+        self.snapshotBtn = tk.Button(controlFrame,text="SNAPSHOT",command=self.takeSnapshot, width=10, height=3)
+        self.snapshotBtn.pack(side=tk.LEFT)
+        self.startBtn = tk.Button(controlFrame,text="START",command=self.startExps, width=10, height=3)
+        self.startBtn.pack(side=tk.RIGHT)
+        tk.Button(controlFrame,text="Cancel", command=self.cancel, width=10, height=3).pack(side=tk.BOTTOM)
+        controlFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
+
+        zoomControl = tk.Frame(frame)
+        tk.Button(zoomControl, text="Zoom+", command=self.zoomin, width=5, height=3).pack(side=tk.RIGHT)
+        tk.Button(zoomControl, text="Zoom-", command=self.zoomout, width=5, height=3).pack(side=tk.RIGHT)
+        zoomControl.pack(side=tk.TOP, padx=5, pady=5)
 
     def resize(self, event):
         if(event.widget == self.root and
            (self.windowWidth != event.width or self.windowHeight != event.height)):
             print(f'{event.widget=}: {event.height=}, {event.width=}\n')
             self.windowWidth, self.windowHeight = event.width, event.height
-            col0w = round(0.80 * self.windowWidth)
-            col1w = self.windowWidth - col0w
-            row0h = round(0.10 * self.windowHeight)
-            row1h = round(0.10 * self.windowHeight)
-            row2h = self.windowHeight - (row0h+row1h)
 
-            self.leftControlFrame.config(height =row0h,width = col0w)
-            self.histoCanvas.config(height=row0h+row1h, width=col1w)
-            self.imageCanvasFrame.config(height=(row1h+row2h), width=col0w)
-            self.imageCanvas.config(height=(row1h+row2h), width=col0w)
             self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-            self.rightControlFrame.config(height=row2h, width=col1w)
 
             # Refit image
             self.displayImage()
@@ -402,58 +442,6 @@ class AstroCam:
             except queue.Empty:
                 pass
 
-    def setupControlBoard(self):
-        btnHt = 5
-        col = 0
-
-        ##############ISO##############
-        
-        self.isoList=[]
-        tkinter.Label(self.leftControlFrame,text="ISO").grid(row=0,column=col)
-        col +=1
-        # for i in range(len(self.isoNumbers)):
-        #     radioBtn=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.isoNumbers[i],command=self.onIsoSelected,variable=self.iso_number, value=self.isoNumbers[i])
-        #     radioBtn.grid(row=0,column=col)
-        #     self.isoList.append(radioBtn)
-        #     col += 1
-
-        isoMenu = tkinter.Entry(self.leftControlFrame, textvariable=self.iso_number)
-        isoMenu.grid(row=0, column=col)
-        self.isoList.append(isoMenu)
-        col +=1 
-        
-        ##############EXPOSIURE TIME##############
-        
-        self.expList=[]
-        tkinter.Label(self.leftControlFrame,text="EXPOSURE").grid(row=0,column=col)
-        col += 1
-        # for i in range(len(self.expTimes)):
-        #     radioforexp=tkinter.Radiobutton(self.leftControlFrame,padx=0,bg="pink",height=btnHt,text=self.expTimes[i],command=self.onExpSelected,variable=self.exp_time, value=self.expTimes[i])
-        #     radioforexp.grid(row=0,column=col)
-        #     self.expList.append(radioforexp)
-        #     col += 1
-
-        expMenu = tkinter.Entry(self.leftControlFrame, textvariable=self.exp_time)
-        expMenu.grid(row=0, column=col)
-        self.expList.append(expMenu)
-        col += 1
-
-        ##############EXPOSIURE NUMBER##############
-        tkinter.Label(self.leftControlFrame,text=" ").grid(row=0,column=col)
-        col += 1
-        tkinter.Button(self.leftControlFrame,text="|\n|\nV",command=self.exp_number_down, width=10, height=3).grid(row=0,column=col)
-        col += 1
-        tkinter.Label(self.leftControlFrame,textvariable=self.exposure_number).grid(row=0,column=col)
-        col += 1
-        tkinter.Button(self.leftControlFrame,text="^\n|\n|",command=self.exp_number_up, width=10, height=3).grid(row=0,column=col)
-        col += 1
-
-        ##### ZOOM ####
-        tkinter.Button(self.leftControlFrame, text="Zoom+", command=self.zoomin, width=10, height=3).grid(row=0,column=col)
-        col += 1
-        tkinter.Button(self.leftControlFrame, text="Zoom-", command=self.zoomout, width=10, height=3).grid(row=0,column=col)
-        col += 1
-
     def zoomin(self):
         self.imageScale += 0.5
         self.displayImage()
@@ -499,68 +487,30 @@ class AstroCam:
             self.histoCanvas.create_line(self.histoData[2], fill="white")
 
     def coolCamera(self):
-        def coolproc():
-            self.camera.coolto(0)
-
-        thread = Thread(target=coolproc)
+        thread = Thread(target=self.camera.coolto, args=[0])
         thread.start()
-        while thread.is_alive():
-            self.cameraTemp = f"Cooling, {self.camera.temperature}C"
-            time.sleep(3)
-        self.cameraTemp = f"Done cooling: {self.camera.temperature}C"
     
     def warmCamera(self):
-        def warmproc():
-            self.camera.warmto(0)
-
-        thread = Thread(target=warmproc)
+        thread = Thread(target=self.camera.warmto, args=[25])
         thread.start()
-        while thread.is_alive():
-            self.cameraTemp = f"Warming, {self.camera.temperature}C"
-            time.sleep(3)
-        self.cameraTemp = f"Done warming: {self.camera.temperature}C"
 
-    def updateInfo(self):
-        self.cameraTemp = f"Temp: {self.camera.temperature}C"
-        self.focuserPos = f"Pos: {self.focuser.position}"
+    def statusPolling(self):
+        self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
+        self.focuserPos.set(f"Pos: {self.focuser.position}")
+        self.root.after(2000, self.statusPolling)
 
-    def setupTestStart(self):
-        
-        row = 0
-        col = 0
+    def startStatusPolling(self):
+        self.root.after_idle(self.statusPolling)
 
-        tkinter.Button(self.rightControlFrame, text="Cool", command=self.coolCamera).grid(row=row,column=col,padx=5, pady=5)
-        col += 1
-        tkinter.Label(self.rightControlFrame, textvariable=self.cameraTemp).grid(row=row,column=col,padx=5, pady=5)
-        col += 1
-        tkinter.Button(self.rightControlFrame, text="Warm", command=self.warmCamera).grid(row=row,column=col,padx=5, pady=5)
-
-        row += 1
-        col = 0
-        tkinter.Label(self.rightControlFrame,textvariable=self.focuserPos).grid(row=row,column=col,padx=5, pady=5)
-
-        row += 1
-        col = 0
-
-        tkinter.Label(self.rightControlFrame,textvariable=self.expVar).grid(row=row,column=col,padx=5, pady=5)
-        
-        row += 1
-        col = 0
-
-        col += 1
-        self.snapshotBtn = tkinter.Button(self.rightControlFrame,text="SNAPSHOT",command=self.takeSnapshot, width=10, height=3)
-        self.snapshotBtn.grid(row=row, column=col,padx=5, pady=5)
-
-        row += 1
-        col = 0
-
-        tkinter.Button(self.rightControlFrame,text="Cancel", command=self.cancel, width=10, height=3).grid(row=row,column=col,padx=5, pady=5)
-
-        col += 1
-        self.startBtn = tkinter.Button(self.rightControlFrame,text="START",command=self.startExps, width=10, height=3)
-        self.startBtn.grid(row=row, column=col,padx=5, pady=5)
-        
-
+    def onkeypress(self, event):
+        if event.char == 'i':
+            self.focuser.movein(1)
+        elif event.char == 'I':
+            self.focuser.movein(5)
+        elif event.char == 'o':
+            self.focuser.moveout(1)
+        elif event.char == 'O':
+            self.focuser.moveout(5)
 
 if __name__ == "__main__":
 
@@ -572,6 +522,5 @@ if __name__ == "__main__":
     Path(destDir).mkdir(exist_ok=True)
 
     astroCam = AstroCam(str(args.cameraModel), destDir)
-    astroCam.setupControlBoard()
-    astroCam.setupTestStart()
+    astroCam.startStatusPolling()
     astroCam.root.mainloop()
