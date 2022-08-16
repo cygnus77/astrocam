@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import tkinter as tk
+import tkinter.ttk as ttk
 import rawpy
 from PIL import Image, ImageTk
 import time
@@ -47,22 +48,20 @@ class DummySnapProcess(Process):
                 pass
 
 class SnapProcess(Thread):
-    def __init__(self, cam: Camera, focuser: Focuser, iso, exp, info: dict, input_queue, output_queue, destDir):
+    def __init__(self, cam: Camera, focuser: Focuser, input_queue, output_queue, destDir):
         super().__init__()
         self.cam = cam
         self.focuser = focuser
-        self.iso = iso
-        self.exp = exp
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.destDir = Path(destDir)
-        self.info = info
 
     def run(self):
         try:
-            while self.input_queue.get(block=False):
-                self.cam.gain = self.iso
-                self.cam.start_exposure(self.exp)
+            while True:
+                exp_job = self.input_queue.get(block=False)
+                self.cam.gain = exp_job['iso']
+                self.cam.start_exposure(exp_job['exp'])
                 date_obs = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
                 
                 time.sleep(self.exp)
@@ -74,10 +73,10 @@ class SnapProcess(Thread):
 
                 hdr = fits.Header({
                     'COMMENT': 'Anand Dinakar',
-                    'OBJECT': self.info["object_name"],
+                    'OBJECT': exp_job["object_name"],
                     'INSTRUME': self.cam.name,
                     'DATE-OBS': date_obs,
-                    'EXPTIME': self.exp,
+                    'EXPTIME': exp_job['exp'],
                     'CCD-TEMP': temperature,
                     'XPIXSZ': self.cam.pixelSize[0], #4.63,
                     'YPIXSZ': self.cam.pixelSize[1], #4.63,
@@ -88,15 +87,15 @@ class SnapProcess(Thread):
                     'BZERO': 0,
                     'BSCALE': 1,
                     'EGAIN': self.cam.egain,
-                    'FOCALLEN': self.info["focal_length"],
+                    'FOCALLEN': exp_job["focal_length"],
                     'SWCREATE': 'AstroCAM',
                     'SBSTDVER': 'SBFITSEXT Version 1.0',
                     'SNAPSHOT': 1,
                     'SET-TEMP': self.cam.set_temp,
                     'IMAGETYP': 'Light Frame',
-                    'SITELAT': self.info["latitude"], #'+40 51 55.000',
-                    'SITELONG': self.info["longitude"], #'-74 20 42.000',
-                    'GAIN': self.iso,
+                    'SITELAT': exp_job["latitude"], #'+40 51 55.000',
+                    'SITELONG': exp_job["longitude"], #'-74 20 42.000',
+                    'GAIN': exp_job['iso'],
                     'OFFSET': self.cam.offset,
                     'BAYERPAT': self.cam.sensor_type.name
                 })
@@ -114,7 +113,10 @@ class SnapProcess(Thread):
 
                 self.output_queue.put(str(output_fname))
 
-                self.focuser.movein(2)
+                self.focuser.movein(exp_job['focuser_adj'])
+
+                if 'frame_delay' in exp_job:
+                    time.sleep(exp_job['frame_delay'])
 
         except queue.Empty:
             pass
@@ -192,7 +194,6 @@ class AstroCam:
 
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
-        #self.root.attributes('-fullscreen', True)
         self.root.geometry(f"{self.windowWidth}x{self.windowHeight}")
         self.root.bind("<Configure>", self.resize)
         self.root.bind("<Key>", self.onkeypress)
@@ -213,30 +214,35 @@ class AstroCam:
         self.cameraTemp = tk.StringVar()
         self.focuserPos = tk.StringVar()
 
-        self.info = {
-            "object_name": "M31",
-            "focal_length": 1764,
-            "latitude": "+40 51 55.000",
-            "longitude": "-74 20 42.000"
-        }
-
         ##############VARIABLES##############
         self.iso_number=tk.IntVar()
         self.iso_number.set(120)
         self.exp_time=tk.DoubleVar()
         self.exp_time.set(1.0)
+        self.delay_time = tk.DoubleVar()
+        self.delay_time.set(0)
+        self.focuser_shift = tk.IntVar()
+        self.focuser_shift.set(2)
 
         self.exposure_number=tk.IntVar()
         self.exposure_number.set(DEFAULT_NUM_EXPS)
-        self.parentFrame=tk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
 
-        self.imageCanvasFrame = tk.Frame(self.parentFrame)
+        self.root.style = ttk.Style()
+        self.root.style.configure("TButton", padding=6, relief="flat", foreground="#c22", background="#500", font=("Segoe UI", 14, "bold"))
+        self.root.style.configure("TFrame", foreground="#c22", background="#500")
+        self.root.style.configure("TLabel", foreground="#c22", background="#500", font=("Segoe UI", 14, "bold"))
+        self.root.style.configure("TEntry", foreground="#c22", background="#500")
+        self.root.style.configure("TScrollbar", foreground="#c22", background="#500")
+
+        self.parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
+
+        self.imageCanvasFrame = ttk.Frame(self.parentFrame)
         
-        self.imageCanvas = tk.Canvas(self.imageCanvasFrame)
-        self.hbar=tk.Scrollbar(self.imageCanvasFrame, orient=tk.HORIZONTAL)
+        self.imageCanvas = tk.Canvas(self.imageCanvasFrame, background="#500")
+        self.hbar=ttk.Scrollbar(self.imageCanvasFrame, orient=tk.HORIZONTAL)
         self.hbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.hbar.config(command=self.imageCanvas.xview)
-        self.vbar=tk.Scrollbar(self.imageCanvasFrame, orient=tk.VERTICAL)
+        self.vbar=ttk.Scrollbar(self.imageCanvasFrame, orient=tk.VERTICAL)
         self.vbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.vbar.config(command=self.imageCanvas.yview)
         self.imageCanvas.config(xscrollcommand=self.hbar.set, yscrollcommand=self.vbar.set)
@@ -245,16 +251,16 @@ class AstroCam:
         self.imageCanvasFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
 
 
-        self.controlPanelFrame = tk.Frame(self.parentFrame)
+        self.controlPanelFrame = ttk.Frame(self.parentFrame)
 
         self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=150, height=150, bg='black')
         self.histoCanvas.pack(side=tk.TOP)
 
-        self.rightControlFrame = tk.Frame(self.controlPanelFrame)
+        self.rightControlFrame = ttk.Frame(self.controlPanelFrame)
         self.setupFocuserThermo(self.rightControlFrame)
         self.rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
-        self.leftControlFrame=tk.Frame(self.controlPanelFrame)
+        self.leftControlFrame=ttk.Frame(self.controlPanelFrame)
         self.setupControlBoard(self.leftControlFrame)
         self.leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
@@ -263,50 +269,60 @@ class AstroCam:
         self.parentFrame.pack(fill=tk.BOTH, expand=True)
 
     def setupFocuserThermo(self, frame):
-        tempFrame = tk.Frame(frame)
-        tk.Button(tempFrame, text="Cool", command=self.coolCamera, width=5, height=3).pack(side=tk.LEFT, padx=5, pady=5)
-        tk.Label(tempFrame, textvariable=self.cameraTemp, width=10, height=3).pack(side=tk.LEFT, padx=5, pady=5)
-        tk.Button(tempFrame, text="Warm", command=self.warmCamera, width=5, height=3).pack(side=tk.LEFT, padx=5, pady=5)
+        tempFrame = ttk.Frame(frame)
+        ttk.Button(tempFrame, text="Cool", command=self.coolCamera).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Label(tempFrame, textvariable=self.cameraTemp).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
         tempFrame.pack(fill=tk.X, side=tk.TOP)
 
-        focusFrame = tk.Frame(frame)
-        tk.Label(focusFrame,textvariable=self.focuserPos).pack(side=tk.LEFT)
+        focusFrame = ttk.Frame(frame)
+        ttk.Label(focusFrame,textvariable=self.focuserPos).pack(side=tk.LEFT)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
 
 
     def setupControlBoard(self, frame):
 
-        settingsFrame = tk.Frame(frame)
+        settingsFrame = ttk.Frame(frame)
 
-        isoFrame = tk.Frame(settingsFrame)
-        tk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
-        tk.Entry(isoFrame, textvariable=self.iso_number).pack(side=tk.LEFT)
+        isoFrame = ttk.Frame(settingsFrame)
+        ttk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
+        ttk.Entry(isoFrame, textvariable=self.iso_number, font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT)
         isoFrame.pack(fill=tk.X, side=tk.TOP)
 
-        shutterFrame = tk.Frame(settingsFrame)
-        tk.Label(shutterFrame,text="Shutter").pack(side=tk.LEFT)
-        tk.Entry(shutterFrame, textvariable=self.exp_time).pack(side=tk.LEFT)
+        shutterFrame = ttk.Frame(settingsFrame)
+        ttk.Label(shutterFrame,text="Shutter").pack(side=tk.LEFT)
+        ttk.Entry(shutterFrame, textvariable=self.exp_time, font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT)
         shutterFrame.pack(fill=tk.X, side=tk.TOP)
 
-        expFrame = tk.Frame(settingsFrame)
-        tk.Button(expFrame,text="|\n|\nV",command=self.exp_number_down, width=5, height=3).pack(side=tk.LEFT)
-        tk.Label(expFrame,textvariable=self.exposure_number).pack(side=tk.LEFT)
-        tk.Button(expFrame,text="^\n|\n|",command=self.exp_number_up, width=5, height=3).pack(side=tk.LEFT)
+        expFrame = ttk.Frame(settingsFrame)
+        ttk.Button(expFrame,text="Down \u2193",command=self.exp_number_down).pack(side=tk.LEFT)
+        ttk.Label(expFrame,textvariable=self.exposure_number).pack(side=tk.LEFT)
+        ttk.Button(expFrame,text="\u2191 Up",command=self.exp_number_up).pack(side=tk.LEFT)
         expFrame.pack(fill=tk.X, side=tk.TOP)
+        
+        delayFrame = ttk.Frame(settingsFrame)
+        ttk.Label(delayFrame,text="Delay").pack(side=tk.LEFT)
+        ttk.Entry(delayFrame, textvariable=self.delay_time, font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT)
+        delayFrame.pack(fill=tk.X, side=tk.TOP)
+
+        focusShiftFrame = ttk.Frame(settingsFrame)
+        ttk.Label(focusShiftFrame,text="Focus Shift").pack(side=tk.LEFT)
+        ttk.Entry(focusShiftFrame, textvariable=self.focuser_shift, font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT)
+        focusShiftFrame.pack(fill=tk.X, side=tk.TOP)
 
         settingsFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
-        controlFrame = tk.Frame(frame)
-        self.snapshotBtn = tk.Button(controlFrame,text="SNAPSHOT",command=self.takeSnapshot, width=10, height=3)
-        self.snapshotBtn.pack(side=tk.LEFT)
-        self.startBtn = tk.Button(controlFrame,text="START",command=self.startExps, width=10, height=3)
-        self.startBtn.pack(side=tk.RIGHT)
-        tk.Button(controlFrame,text="Cancel", command=self.cancel, width=10, height=3).pack(side=tk.BOTTOM)
+        controlFrame = ttk.Frame(frame)
+        self.snapshotBtn = ttk.Button(controlFrame,text="SNAPSHOT",command=self.takeSnapshot)
+        self.snapshotBtn.grid(row=0, column=0)
+        self.startBtn = ttk.Button(controlFrame,text="START",command=self.startExps)
+        self.startBtn.grid(row=0, column=1)
+        ttk.Button(controlFrame,text="Cancel", command=self.cancel).grid(row=1, column=1)
         controlFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
-        zoomControl = tk.Frame(frame)
-        tk.Button(zoomControl, text="Zoom+", command=self.zoomin, width=5, height=3).pack(side=tk.RIGHT)
-        tk.Button(zoomControl, text="Zoom-", command=self.zoomout, width=5, height=3).pack(side=tk.RIGHT)
+        zoomControl = ttk.Frame(frame)
+        ttk.Button(zoomControl, text="Zoom+", command=self.zoomin).pack(side=tk.RIGHT)
+        ttk.Button(zoomControl, text="Zoom-", command=self.zoomout).pack(side=tk.RIGHT)
         zoomControl.pack(side=tk.TOP, padx=5, pady=5)
 
     def resize(self, event):
@@ -370,17 +386,28 @@ class AstroCam:
         except queue.Empty:
             pass
 
+        exp_job = {
+            "object_name": "M31",
+            "focal_length": 1764,
+            "latitude": "+40 51 55.000",
+            "longitude": "-74 20 42.000",
+            "iso": self.iso_number.get(),
+            "exp": self.exp_time.get(),
+            'focuser_adj':  self.focuser_shift.get(),
+            'frame_delay':  self.delay_time.get(),
+        }
+
         # Add items for each required exposure
         try:
             for _ in range(self.exposure_number.get()):
-                self.req_queue.put(1)
+                self.req_queue.put(exp_job)
         except queue.Full:
             pass
 
-        def threadProc(iso, exp):
+        def threadProc():
             # Spawn process
-            #snapProc = SnapProcess(self.camera, iso, exp, self.info, self.req_queue, self.image_queue, self.destDir)
-            snapProc = DummySnapProcess(self.camera, iso, exp, self.info, self.req_queue, self.image_queue, self.destDir)
+            #snapProc = SnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
+            snapProc = DummySnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
             snapProc.start()
 
             # Get filenames from image queue
@@ -395,8 +422,8 @@ class AstroCam:
                         while snapProc.is_alive():
                             time.sleep(1)
                         print("Restarting camera proc")
-                        #snapProc = SnapProcess(self.camera, iso, exp, self.req_queue, self.image_queue, self.destDir)
-                        snapProc = DummySnapProcess(self.camera, iso, exp, self.info, self.req_queue, self.image_queue, self.destDir)
+                        #snapProc = SnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
+                        snapProc = DummySnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
                         snapProc.start()
                 else:
                     # Update UI
@@ -404,7 +431,7 @@ class AstroCam:
                     self.loadingDone(data)
 
         # Spawn thread
-        Thread(target=threadProc, args=[self.iso_number.get(), self.exp_time.get()]).start()
+        Thread(target=threadProc, args=[]).start()
 
     def cancel(self):
         self.cancelJob = True
