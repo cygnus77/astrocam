@@ -1,6 +1,8 @@
 from datetime import datetime
-from pathlib import Path
 import os
+from pathlib import Path
+import shutil
+import tempfile
 import tkinter as tk
 import tkinter.ttk as ttk
 from turtle import bgcolor
@@ -40,7 +42,14 @@ class DummySnapProcess(Process):
                     break
                 time.sleep(exp_job['exp'])
                 fname = random.choice(list(Path(r"C:\code\astrocam\images").glob("*.fit")))
-                self.output_queue.put(str(fname))
+
+                if 'liveview' in exp_job:
+                    output_fname = tempfile.gettempdir() + f"/liveview_{datetime.now().timestamp()}.fit"
+                    shutil.copy(fname, output_fname)
+                else:
+                    output_fname = str(fname)
+                
+                self.output_queue.put(output_fname)
 
                 if exp_job['focuser_adj']:
                     self.focuser.movein(exp_job['focuser_adj'])
@@ -106,21 +115,25 @@ class SnapProcess(Thread):
                     'SNAPSHOT': 1,
                     'SET-TEMP': self.cam.set_temp,
                     'IMAGETYP': 'Light Frame',
-                    'SITELAT': exp_job["latitude"], #'+40 51 55.000',
-                    'SITELONG': exp_job["longitude"], #'-74 20 42.000',
+                    'SITELAT': exp_job["latitude"],
+                    'SITELONG': exp_job["longitude"],
                     'GAIN': exp_job['iso'],
                     'OFFSET': self.cam.offset,
                     'BAYERPAT': self.cam.sensor_type.name
                 })
 
-                sno_file = Path('serial_no.txt')
-                if sno_file.exists():
-                    serial_no = int(sno_file.read_text())
+                if 'liveview' in exp_job:
+                    output_fname = tempfile.gettempdir() + f"/liveview_{datetime.now().timestamp()}.fit"
                 else:
-                    serial_no = 0
-                sno_file.write_text(str(serial_no+1))
+                    sno_file = Path('serial_no.txt')
+                    if sno_file.exists():
+                        serial_no = int(sno_file.read_text())
+                    else:
+                        serial_no = 0
+                    sno_file.write_text(str(serial_no+1))
 
-                output_fname = self.destDir / f"Image{serial_no:05d}_{exp_job['exp']}sec_{exp_job['iso']}gain_{temperature}C.fit"
+                    output_fname = self.destDir / f"Image{serial_no:05d}_{exp_job['exp']}sec_{exp_job['iso']}gain_{temperature}C.fit"
+
                 hdu = fits.PrimaryHDU(img, header=hdr)
                 hdu.writeto(output_fname)
 
@@ -215,7 +228,6 @@ class AstroCam:
         self.camera = Camera(cameraModel)
         self.focuser = Focuser("focus")
         self.destDir = destDir
-        self.runStatus = tk.StringVar()
         self.runningExposures = 0
         self.runningLiveView = False
         self.cancelJob = False
@@ -226,23 +238,33 @@ class AstroCam:
         self.req_queue = Queue(1000)
         self.imageScale = 1.0
 
+        ##############VARIABLES##############
+        self.runStatus = tk.StringVar()
         self.cameraTemp = tk.StringVar()
         self.cameraCooler = tk.StringVar()
         self.focuserPos = tk.IntVar()
         self.focuserGotoTgt = tk.IntVar()
 
-        ##############VARIABLES##############
         self.iso_number=tk.IntVar()
         self.iso_number.set(120)
         self.exp_time=tk.DoubleVar()
         self.exp_time.set(1.0)
+        self.exposure_number=tk.IntVar()
+        self.exposure_number.set(DEFAULT_NUM_EXPS)
+
         self.delay_time = tk.DoubleVar()
         self.delay_time.set(0)
         self.focuser_shift = tk.IntVar()
         self.focuser_shift.set(0)
 
-        self.exposure_number=tk.IntVar()
-        self.exposure_number.set(DEFAULT_NUM_EXPS)
+        self.obsObject = tk.StringVar()
+        self.obsObject.set("Unknown")
+        self.focalLength = tk.IntVar()
+        self.focalLength.set(0)
+        self.latitude = tk.StringVar()
+        self.latitude.set("+40 51 55.000")
+        self.longitude = tk.StringVar()
+        self.longitude.set("-74 20 42.000")
 
         self.EntryFont = ("Segoe UI", 14)
         self.entryWidth = 5
@@ -297,13 +319,14 @@ class AstroCam:
         self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=250, height=200, bg='black')
         self.histoCanvas.pack(side=tk.TOP)
 
-        ttk.Label(self.controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP)
+        ttk.Label(self.controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
+        ttk.Button(self.controlPanelFrame, textvariable=self.obsObject, command=self.obs_popup).pack(side=tk.TOP, pady=5)
 
-        self.rightControlFrame = ttk.Frame(self.controlPanelFrame)
+        self.rightControlFrame = ttk.Frame(self.controlPanelFrame, padding=5, relief='raised')
         self.setupFocuserThermo(self.rightControlFrame)
         self.rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
-        self.leftControlFrame=ttk.Frame(self.controlPanelFrame)
+        self.leftControlFrame=ttk.Frame(self.controlPanelFrame, padding=5, relief='raised')
         self.setupControlBoard(self.leftControlFrame)
         self.leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
@@ -335,19 +358,18 @@ class AstroCam:
 
 
     def setupControlBoard(self, frame):
-
         settingsFrame = ttk.Frame(frame)
 
         settingsRow1 = ttk.Frame(settingsFrame)
         isoFrame = ttk.Frame(settingsRow1)
         ttk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
         ttk.Entry(isoFrame, textvariable=self.iso_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
-        isoFrame.pack(side=tk.LEFT)
+        isoFrame.pack(side=tk.LEFT, pady=3)
 
         shutterFrame = ttk.Frame(settingsRow1)
         ttk.Label(shutterFrame,text="Shutter").pack(side=tk.LEFT)
         ttk.Entry(shutterFrame, textvariable=self.exp_time, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
-        shutterFrame.pack(side=tk.RIGHT)
+        shutterFrame.pack(side=tk.RIGHT, pady=3)
         settingsRow1.pack(fill=tk.X, side=tk.TOP)
 
         expFrame = ttk.Frame(settingsFrame)
@@ -355,7 +377,7 @@ class AstroCam:
         ttk.Button(expFrame,text="\u2193",command=self.exp_number_down, style='X.TButton', width=2).pack(side=tk.LEFT)
         ttk.Entry(expFrame,textvariable=self.exposure_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         ttk.Button(expFrame,text="\u2191",command=self.exp_number_up, style='X.TButton', width=2).pack(side=tk.LEFT)
-        expFrame.pack(fill=tk.X, side=tk.TOP)
+        expFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
         
         extrasFrame = ttk.Frame(settingsFrame)
         delayFrame = ttk.Frame(extrasFrame)
@@ -368,19 +390,45 @@ class AstroCam:
         ttk.Entry(focusShiftFrame, textvariable=self.focuser_shift, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         focusShiftFrame.pack(fill=tk.X, side=tk.RIGHT)
 
-        extrasFrame.pack(fill=tk.X, side=tk.TOP)
+        extrasFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
 
         settingsFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
         controlFrame = ttk.Frame(frame)
         self.liveviewBtn = ttk.Button(controlFrame,text="LiveView",command=self.liveview)
-        self.liveviewBtn.grid(row=0, column=0)
+        self.liveviewBtn.grid(row=0, column=0, padx=2, pady=2)
         self.snapshotBtn = ttk.Button(controlFrame,text="Snap",command=self.takeSnapshot)
-        self.snapshotBtn.grid(row=0, column=1)
+        self.snapshotBtn.grid(row=0, column=1, padx=2, pady=2)
         self.startBtn = ttk.Button(controlFrame,text="Start",command=self.startExps)
-        self.startBtn.grid(row=0, column=2)
-        ttk.Button(controlFrame,text="Stop", command=self.cancel).grid(row=1, column=2)
+        self.startBtn.grid(row=0, column=2, padx=2, pady=2)
+        ttk.Button(controlFrame,text="Stop", command=self.cancel).grid(row=1, column=2, padx=2, pady=2)
         controlFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
+
+    def obs_popup(self):
+        win = tk.Toplevel()
+        win.wm_title("Window")
+
+        mainframe = ttk.Frame(win)
+        row = 0
+        ttk.Label(mainframe, text="Object Name").grid(row=row, column=0, padx=2, pady=2)
+        ttk.Entry(mainframe, textvariable=self.obsObject).grid(row=row, column=1, padx=2, pady=2)
+        row+=1
+
+        ttk.Label(mainframe, text="Focal Length").grid(row=row, column=0)
+        ttk.Entry(mainframe, textvariable=self.focalLength).grid(row=row, column=1, padx=2, pady=2)
+        row+=1
+
+        ttk.Label(mainframe, text="Latitude").grid(row=row, column=0)
+        ttk.Entry(mainframe, textvariable=self.latitude).grid(row=row, column=1, padx=2, pady=2)
+        row+=1
+
+        ttk.Label(mainframe, text="Longitude").grid(row=row, column=0, padx=2, pady=2)
+        ttk.Entry(mainframe, textvariable=self.longitude).grid(row=row, column=1, padx=2, pady=2)
+        row+=1
+
+        ttk.Button(mainframe, text="OK", command=win.destroy).grid(row=row, column=1, padx=2, pady=2)
+        mainframe.pack(fill=tk.BOTH, expand=True)
+
 
     def resize(self, event):
         if(event.widget == self.root and
@@ -393,6 +441,18 @@ class AstroCam:
             # Refit image
             self.displayImage()
             self.displayHistogram()
+
+    def getExposureSettings(self):
+        return {
+            "object_name": self.obsObject.get(),
+            "focal_length": self.focalLength.get(),
+            "latitude": self.latitude.get(),
+            "longitude": self.longitude.get(),
+            "iso": self.iso_number.get(),
+            "exp": self.exp_time.get(),
+            'focuser_adj':  self.focuser_shift.get(),
+            'frame_delay':  self.delay_time.get()
+        }
 
 
     def startExps(self):
@@ -456,29 +516,22 @@ class AstroCam:
         except queue.Empty:
             pass
 
-        exp_job = {
-            "object_name": "M31",
-            "focal_length": 1764,
-            "latitude": "+40 51 55.000",
-            "longitude": "-74 20 42.000",
-            "iso": self.iso_number.get(),
-            "exp": self.exp_time.get(),
-            'focuser_adj':  self.focuser_shift.get(),
-            'frame_delay':  self.delay_time.get()
-        }
-
         def threadProc():
             #snapProc = SnapProcess(self.camera, self.focuser, True, self.req_queue, self.image_queue, self.destDir)
             snapProc = DummySnapProcess(self.camera, self.focuser, True, self.req_queue, self.image_queue, self.destDir)
             snapProc.start()
             # Add items for each required exposure
             while not self.cancelJob:
+                
+                exp_job = self.getExposureSettings()
+                exp_job['liveview'] = True
                 self.req_queue.put(exp_job)
                 # Get filenames from image queue
                 fname = self.image_queue.get(block=True)
                 # Update UI
                 data = loadImageHisto(fname, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
                 self.loadingDone(data)
+                os.unlink(fname)
                 
             self.req_queue.put(None)
         # Spawn thread
@@ -500,16 +553,7 @@ class AstroCam:
         except queue.Empty:
             pass
 
-        exp_job = {
-            "object_name": "M31",
-            "focal_length": 1764,
-            "latitude": "+40 51 55.000",
-            "longitude": "-74 20 42.000",
-            "iso": self.iso_number.get(),
-            "exp": self.exp_time.get(),
-            'focuser_adj':  self.focuser_shift.get(),
-            'frame_delay':  self.delay_time.get(),
-        }
+        exp_job = self.getExposureSettings()
 
         # Add items for each required exposure
         try:
@@ -563,16 +607,7 @@ class AstroCam:
             newexp = expnum + 5
         self.exposure_number.set(newexp)
         if self.runningExposures:
-            exp_job = {
-                "object_name": "M31",
-                "focal_length": 1764,
-                "latitude": "+40 51 55.000",
-                "longitude": "-74 20 42.000",
-                "iso": self.iso_number.get(),
-                "exp": self.exp_time.get(),
-                'focuser_adj':  self.focuser_shift.get(),
-                'frame_delay':  self.delay_time.get(),
-            }
+            exp_job = self.getExposureSettings()
             try:
                 for i in range(newexp-expnum):
                     self.req_queue.put(exp_job, block=False)
