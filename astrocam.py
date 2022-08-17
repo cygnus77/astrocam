@@ -24,6 +24,9 @@ import random
 
 DEFAULT_NUM_EXPS = 5
 
+HIST_WIDTH = 250
+HIST_HEIGHT= 200
+
 class DummySnapProcess(Process):
     def __init__(self, cam: Camera, focuser: Focuser, liveview, input_queue, output_queue, destDir):
         super().__init__()
@@ -154,7 +157,7 @@ class SnapProcess(Thread):
                 pass
 
 
-def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight):
+def loadImageHisto(imageFilename):
     if imageFilename is None:
         return None
     ext = imageFilename[-3:].lower()
@@ -197,27 +200,32 @@ def loadImageHisto(imageFilename, imgCanvasWidth, imgCanvasHeight, histoWidth, h
     red = r.histogram()
     green = g.histogram()
     blue = b.histogram()
-    sf_y = histoHeight / max( [max(red),max(green),max(blue)] )
-    sf_x = histoWidth / 256
+    sf_y = HIST_HEIGHT / max( [max(red),max(green),max(blue)] )
+    sf_x = HIST_WIDTH / 256
 
     red_pts = []
     green_pts = []
     blue_pts = []
     for i in range(255):
         red_pts.append(int(i*sf_x))
-        red_pts.append(histoHeight-round(red[i] * sf_y))
+        red_pts.append(HIST_HEIGHT-round(red[i] * sf_y))
         green_pts.append(int(i*sf_x))
-        green_pts.append(histoHeight-round(green[i] * sf_y))
+        green_pts.append(HIST_HEIGHT-round(green[i] * sf_y))
         blue_pts.append(int(i*sf_x))
-        blue_pts.append(histoHeight-round(blue[i] * sf_y))
+        blue_pts.append(HIST_HEIGHT-round(blue[i] * sf_y))
 
-    params = (img, histoWidth, histoHeight, red_pts, green_pts, blue_pts)
+    params = (img, HIST_WIDTH, HIST_HEIGHT, red_pts, green_pts, blue_pts)
     return params
 
 
 class AstroCam:
-    def __init__(self, cameraModel, destDir):
+    def __init__(self, cameraModel, destDir, debug=False):
         self.root = tk.Tk()
+
+        if debug:
+            self.snapProcess = DummySnapProcess
+        else:
+            self.snapProcess = SnapProcess
 
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
@@ -231,7 +239,6 @@ class AstroCam:
         self.runningExposures = 0
         self.runningLiveView = False
         self.cancelJob = False
-        self.imageFilename = None
         self.unscaledImg = None
         self.histoData = None
         self.image_queue = Queue(1000)  
@@ -275,9 +282,13 @@ class AstroCam:
         fgcolor = "#d22"
         highlightedcolor = "#800"
 
+        # self.root.tk.call('lappend', 'auto_path', './tksvg0.11')
+        self.root.tk.call('lappend', 'auto_path', './awthemes-10.4.0')
+        self.root.tk.call('source', './awthemes-10.4.0/awdark.tcl')
+
         self.root.style = ttk.Style()
 
-        self.root.style.theme_use('clam')
+        self.root.style.theme_use('awdark')
         self.root.style.configure("TButton", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
         self.root.style.configure("TFrame", foreground=fgcolor, background=bgcolor)
         self.root.style.configure("TLabel", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
@@ -290,7 +301,6 @@ class AstroCam:
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
         self.root.style.map("Horizontal.TScrollbar",
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
-        
 
         self.parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
 
@@ -313,14 +323,16 @@ class AstroCam:
         ttk.Button(zoomControl, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.RIGHT)
         zoomControl.place(x=5, y=5)#.pack(side=tk.TOP, padx=5, pady=5)
 
-
         self.controlPanelFrame = ttk.Frame(self.parentFrame)
 
-        self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=250, height=200, bg='black')
+        self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
         self.histoCanvas.pack(side=tk.TOP)
 
         ttk.Label(self.controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
-        ttk.Button(self.controlPanelFrame, textvariable=self.obsObject, command=self.obs_popup).pack(side=tk.TOP, pady=5)
+        observationFrame = ttk.Frame(self.controlPanelFrame)
+        ttk.Label(observationFrame, text="Observation ").grid(row=0, column=0, padx=5)
+        ttk.Button(observationFrame, textvariable=self.obsObject, command=self.obs_popup).grid(row=0, column=1, padx=5)
+        observationFrame.pack(fill=tk.X, side=tk.TOP, pady=5)
 
         self.rightControlFrame = ttk.Frame(self.controlPanelFrame, padding=5, relief='raised')
         self.setupFocuserThermo(self.rightControlFrame)
@@ -395,7 +407,7 @@ class AstroCam:
         settingsFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
         controlFrame = ttk.Frame(frame)
-        self.liveviewBtn = ttk.Button(controlFrame,text="LiveView",command=self.liveview)
+        self.liveviewBtn = ttk.Button(controlFrame,text="LiveView",command=self.startLiveview)
         self.liveviewBtn.grid(row=0, column=0, padx=2, pady=2)
         self.snapshotBtn = ttk.Button(controlFrame,text="Snap",command=self.takeSnapshot)
         self.snapshotBtn.grid(row=0, column=1, padx=2, pady=2)
@@ -454,7 +466,6 @@ class AstroCam:
             'frame_delay':  self.delay_time.get()
         }
 
-
     def startExps(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
@@ -466,23 +477,39 @@ class AstroCam:
         self.exposure_number.set(1)
         self.startWorker()
 
-    def liveview(self):
+    def startLiveview(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.cancelJob = False
         self.runningLiveView = True
-        self.startLiveViewWorker()
-
+        self.enableExpButtons(False)
+        self.runStatus.set("Live view")
+        self.clearInputQueue()
+        def threadProc():
+            snapProc = self.snapProcess(self.camera, self.focuser, True, self.req_queue, self.image_queue, self.destDir)
+            snapProc.start()
+            # Add items for each required exposure
+            while not self.cancelJob:
+                
+                exp_job = self.getExposureSettings()
+                exp_job['liveview'] = True
+                self.req_queue.put(exp_job)
+                # Get filenames from image queue
+                fname = self.image_queue.get(block=True)
+                # Update UI
+                data = loadImageHisto(fname)
+                self.loadingDone(data)
+                os.unlink(fname)
+            self.req_queue.put(None)
+        # Spawn thread
+        Thread(target=threadProc, args=[]).start()
 
     def endRunningExposures(self, msg):
         self.runningExposures = 0
         self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.runStatus.set(msg)
-        self.startBtn["state"] = "normal" 
-        self.snapshotBtn["state"] = "normal"
-        self.liveviewBtn["state"] = "normal"
+        self.enableExpButtons(True)
 
     def loadingDone(self, params):
-
         if self.runningLiveView:
             if self.cancelJob:
                 self.endRunningExposures("Stopped Live view")
@@ -499,16 +526,7 @@ class AstroCam:
         if params is not None:
             self.showImageHisto(*params)
 
-
-    def startLiveViewWorker(self):
-        self.imageFilename = None
-        self.startBtn["state"] = "disabled"
-        self.snapshotBtn["state"] = "disabled"
-        self.liveviewBtn["state"] = "disabled"
-        self.runStatus.set("Live view")
-        imgCanvasWidth, imgCanvasHeight = int(self.imageCanvas["width"]), int(self.imageCanvas["height"])
-        histoWidth, histoHeight = int(self.histoCanvas["width"]), int(self.histoCanvas["height"])
-
+    def clearInputQueue(self):
         # Clear request queue
         try:
             while not self.req_queue.empty():
@@ -516,42 +534,16 @@ class AstroCam:
         except queue.Empty:
             pass
 
-        def threadProc():
-            #snapProc = SnapProcess(self.camera, self.focuser, True, self.req_queue, self.image_queue, self.destDir)
-            snapProc = DummySnapProcess(self.camera, self.focuser, True, self.req_queue, self.image_queue, self.destDir)
-            snapProc.start()
-            # Add items for each required exposure
-            while not self.cancelJob:
-                
-                exp_job = self.getExposureSettings()
-                exp_job['liveview'] = True
-                self.req_queue.put(exp_job)
-                # Get filenames from image queue
-                fname = self.image_queue.get(block=True)
-                # Update UI
-                data = loadImageHisto(fname, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
-                self.loadingDone(data)
-                os.unlink(fname)
-                
-            self.req_queue.put(None)
-        # Spawn thread
-        Thread(target=threadProc, args=[]).start()
+    def enableExpButtons(self, enable=True):
+        newstate = "normal" if enable else "disabled"
+        self.startBtn["state"] = newstate
+        self.snapshotBtn["state"] = newstate
+        self.liveviewBtn["state"] = newstate
 
     def startWorker(self):
-        self.imageFilename = None
-        self.startBtn["state"] = "disabled"
-        self.snapshotBtn["state"] = "disabled"
-        self.liveviewBtn["state"] = "disabled"
+        self.enableExpButtons(False)
         self.runStatus.set("Taking picture" if self.runningExposures == 0 else "Taking sequence")
-        imgCanvasWidth, imgCanvasHeight = int(self.imageCanvas["width"]), int(self.imageCanvas["height"])
-        histoWidth, histoHeight = int(self.histoCanvas["width"]), int(self.histoCanvas["height"])
-
-        # Clear request queue
-        try:
-            while not self.req_queue.empty():
-                self.req_queue.get_nowait()
-        except queue.Empty:
-            pass
+        self.clearInputQueue()
 
         exp_job = self.getExposureSettings()
 
@@ -564,8 +556,7 @@ class AstroCam:
 
         def threadProc():
             # Spawn process
-            #snapProc = SnapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
-            snapProc = DummySnapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
+            snapProc = self.snapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
             snapProc.start()
 
             # Get filenames from image queue
@@ -580,12 +571,11 @@ class AstroCam:
                         while snapProc.is_alive():
                             time.sleep(1)
                         print("Restarting camera proc")
-                        #snapProc = SnapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
-                        snapProc = DummySnapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
+                        snapProc = self.snapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
                         snapProc.start()
                 else:
                     # Update UI
-                    data = loadImageHisto(fname, imgCanvasWidth, imgCanvasHeight, histoWidth, histoHeight)
+                    data = loadImageHisto(fname)
                     self.loadingDone(data)
 
         # Spawn thread
@@ -707,11 +697,12 @@ if __name__ == "__main__":
 
     ap = ArgumentParser()
     ap.add_argument("cameraModel", type=int, choices=[90, 750, 5300, 294])
+    ap.add_argument("--debug", action='store_true', default=False)
     args = ap.parse_args()
 
     destDir = ".\images"
     Path(destDir).mkdir(exist_ok=True)
 
-    astroCam = AstroCam(str(args.cameraModel), destDir)
+    astroCam = AstroCam(str(args.cameraModel), destDir, debug=args.debug)
     astroCam.startStatusPolling()
     astroCam.root.mainloop()
