@@ -322,6 +322,8 @@ class Focuser(AscomDevice):
     self._put("move", {"Position": pos})
     return
 
+  def goto(self, tgt):
+    self._put("move", {"Position": tgt})
 
 if __name__ == "__main__":
 
