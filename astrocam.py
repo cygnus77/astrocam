@@ -117,7 +117,7 @@ class SnapProcess(Thread):
                     'SBSTDVER': 'SBFITSEXT Version 1.0',
                     'SNAPSHOT': 1,
                     'SET-TEMP': self.cam.set_temp,
-                    'IMAGETYP': 'Light Frame',
+                    'IMAGETYP': exp_job['image_type'], #'Light Frame',
                     'SITELAT': exp_job["latitude"],
                     'SITELONG': exp_job["longitude"],
                     'GAIN': exp_job['iso'],
@@ -135,7 +135,7 @@ class SnapProcess(Thread):
                         serial_no = 0
                     sno_file.write_text(str(serial_no+1))
 
-                    output_fname = self.destDir / f"Image{serial_no:05d}_{exp_job['exp']}sec_{exp_job['iso']}gain_{temperature}C.fit"
+                    output_fname = self.destDir / f"{exp_job['image_type']}_{serial_no:05d}_{exp_job['exp']}sec_{exp_job['iso']}gain_{temperature}C.fit"
 
                 hdu = fits.PrimaryHDU(img, header=hdr)
                 hdu.writeto(output_fname)
@@ -258,6 +258,8 @@ class AstroCam:
         self.exp_time.set(1.0)
         self.exposure_number=tk.IntVar()
         self.exposure_number.set(DEFAULT_NUM_EXPS)
+        self.image_type = tk.StringVar()
+        self.image_type.set("Light")
 
         self.delay_time = tk.DoubleVar()
         self.delay_time.set(0)
@@ -292,7 +294,8 @@ class AstroCam:
         self.root.style.configure("TButton", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
         self.root.style.configure("TFrame", foreground=fgcolor, background=bgcolor)
         self.root.style.configure("TLabel", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
-        self.root.style.configure("TEntry", padding=2, foreground="black", background=bgcolor, fieldbackground=fgcolor)
+        self.root.style.configure("TCombobox", padding=2, foreground=fgcolor, background=bgcolor, fieldbackground='black', font=self.EntryFont, width=4)
+        self.root.style.configure("TEntry", padding=2, foreground=fgcolor, background=bgcolor, fieldbackground='black')
         self.root.style.configure("Vertical.TScrollbar", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
         self.root.style.configure("Horizontal.TScrollbar", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
         self.root.style.configure("X.TButton", padding=0, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
@@ -373,6 +376,10 @@ class AstroCam:
         settingsFrame = ttk.Frame(frame)
 
         settingsRow1 = ttk.Frame(settingsFrame)
+        imagetTypeFrame = ttk.Frame(settingsRow1)
+        ttk.Label(imagetTypeFrame, text="Type").pack(side=tk.LEFT)
+        ttk.Combobox(imagetTypeFrame, textvariable=self.image_type, values=["Light", "Dark", "Flat", "Bias"], state='readonly', width=5, font=self.EntryFont).pack(side=tk.LEFT)
+        imagetTypeFrame.pack(side=tk.LEFT, pady=3)
         isoFrame = ttk.Frame(settingsRow1)
         ttk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
         ttk.Entry(isoFrame, textvariable=self.iso_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
