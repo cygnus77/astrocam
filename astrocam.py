@@ -64,7 +64,7 @@ class SnapProcess(Thread):
                 self.cam.start_exposure(exp_job['exp'])
                 date_obs = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
                 
-                time.sleep(self.exp)
+                time.sleep(exp_job['exp'])
                 while not self.cam.imageready:
                     print('waiting')
                     time.sleep(1)
@@ -107,7 +107,7 @@ class SnapProcess(Thread):
                     serial_no = 0
                 sno_file.write_text(str(serial_no+1))
 
-                output_fname = self.destDir / f"Image{serial_no:05d}_{self.exp}sec_{self.iso}gain_{temperature}C.fit"
+                output_fname = self.destDir / f"Image{serial_no:05d}_{exp_job['exp']}sec_{exp_job['iso']}gain_{temperature}C.fit"
                 hdu = fits.PrimaryHDU(img, header=hdr)
                 hdu.writeto(output_fname)
 
@@ -212,6 +212,7 @@ class AstroCam:
         self.imageScale = 1.0
 
         self.cameraTemp = tk.StringVar()
+        self.cameraCooler = tk.StringVar()
         self.focuserPos = tk.StringVar()
 
         ##############VARIABLES##############
@@ -253,7 +254,7 @@ class AstroCam:
 
         self.controlPanelFrame = ttk.Frame(self.parentFrame)
 
-        self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=150, height=150, bg='black')
+        self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=250, height=200, bg='black')
         self.histoCanvas.pack(side=tk.TOP)
 
         self.rightControlFrame = ttk.Frame(self.controlPanelFrame)
@@ -274,6 +275,10 @@ class AstroCam:
         ttk.Label(tempFrame, textvariable=self.cameraTemp).pack(side=tk.LEFT, padx=5, pady=5)
         ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
         tempFrame.pack(fill=tk.X, side=tk.TOP)
+
+        coolerFrame = ttk.Frame(frame)
+        ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
+        coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
         focusFrame = ttk.Frame(frame)
         ttk.Label(focusFrame,textvariable=self.focuserPos).pack(side=tk.LEFT)
@@ -406,8 +411,8 @@ class AstroCam:
 
         def threadProc():
             # Spawn process
-            #snapProc = SnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
-            snapProc = DummySnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
+            snapProc = SnapProcess(self.camera, self.focuser, self.req_queue, self.image_queue, self.destDir)
+            #snapProc = DummySnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
             snapProc.start()
 
             # Get filenames from image queue
@@ -422,8 +427,8 @@ class AstroCam:
                         while snapProc.is_alive():
                             time.sleep(1)
                         print("Restarting camera proc")
-                        #snapProc = SnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
-                        snapProc = DummySnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
+                        snapProc = SnapProcess(self.camera, self.focuser, self.req_queue, self.image_queue, self.destDir)
+                        #snapProc = DummySnapProcess(self.camera, self.req_queue, self.image_queue, self.destDir)
                         snapProc.start()
                 else:
                     # Update UI
@@ -523,8 +528,10 @@ class AstroCam:
 
     def statusPolling(self):
         self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
+        self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
         self.focuserPos.set(f"Pos: {self.focuser.position}")
-        self.root.after(2000, self.statusPolling)
+
+        self.root.after(5000, self.statusPolling)
 
     def startStatusPolling(self):
         self.root.after_idle(self.statusPolling)
