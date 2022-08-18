@@ -21,6 +21,7 @@ import cv2
 from Alpaca.camera import Camera, Focuser
 from astropy.io import fits
 import random
+import itertools
 
 DEFAULT_NUM_EXPS = 5
 
@@ -39,12 +40,13 @@ class DummySnapProcess(Process):
 
     def run(self):
         try:
+            flist = itertools.cycle(Path(r"D:\Astro\20220812\Light1").glob("*.fit"))
             while True:
                 exp_job = self.input_queue.get(block=self.liveview)
                 if not exp_job:
                     break
                 time.sleep(exp_job['exp'])
-                fname = random.choice(list(Path(r"C:\code\astrocam\images").glob("*.fit")))
+                fname = next(flist)
 
                 if 'liveview' in exp_job:
                     output_fname = tempfile.gettempdir() + f"/liveview_{datetime.now().timestamp()}.fit"
@@ -221,6 +223,7 @@ def loadImageHisto(imageFilename):
 class AstroCam:
     def __init__(self, cameraModel, destDir, debug=False):
         self.root = tk.Tk()
+        self.cameraModel = cameraModel
 
         if debug:
             self.snapProcess = DummySnapProcess
@@ -233,8 +236,9 @@ class AstroCam:
         self.root.bind("<Configure>", self.resize)
         self.root.bind("<Key>", self.onkeypress)
         self.root.state("zoomed")
-        self.camera = Camera(cameraModel)
-        self.focuser = Focuser("focus")
+        self.connected = False
+        self.camera = None
+        self.focuser = None
         self.destDir = destDir
         self.runningExposures = 0
         self.runningLiveView = False
@@ -275,6 +279,7 @@ class AstroCam:
         self.longitude = tk.StringVar()
         self.longitude.set("-74 20 42.000")
 
+        # Styling
         self.EntryFont = ("Segoe UI", 14)
         self.entryWidth = 5
         inactivebgcolor = "#100"
@@ -305,61 +310,72 @@ class AstroCam:
         self.root.style.map("Horizontal.TScrollbar",
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
 
-        self.parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
 
-        self.imageCanvasFrame = ttk.Frame(self.parentFrame)
-        
-        self.imageCanvas = tk.Canvas(self.imageCanvasFrame, background="#200")
-        self.hbar=ttk.Scrollbar(self.imageCanvasFrame, orient=tk.HORIZONTAL)
-        self.hbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.hbar.config(command=self.imageCanvas.xview)
-        self.vbar=ttk.Scrollbar(self.imageCanvasFrame, orient=tk.VERTICAL)
-        self.vbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.vbar.config(command=self.imageCanvas.yview)
-        self.imageCanvas.config(xscrollcommand=self.hbar.set, yscrollcommand=self.vbar.set)
+        # Layout
+        parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
+
+        # Image container
+        imageCanvasFrame = ttk.Frame(parentFrame)
+        self.imageCanvas = tk.Canvas(imageCanvasFrame, background="#200")
+        hbar=ttk.Scrollbar(imageCanvasFrame, orient=tk.HORIZONTAL)
+        hbar.pack(side=tk.BOTTOM, fill=tk.X)
+        hbar.config(command=self.imageCanvas.xview)
+        vbar=ttk.Scrollbar(imageCanvasFrame, orient=tk.VERTICAL)
+        vbar.pack(side=tk.RIGHT, fill=tk.Y)
+        vbar.config(command=self.imageCanvas.yview)
+        self.imageCanvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
         self.imageCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
-        self.imageCanvasFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
+        imageCanvasFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
 
+        # Zoom buttons
         self.root.wm_attributes('-transparentcolor', '#ab23ff')
-        zoomControl = ttk.Frame(self.imageCanvasFrame)
+        zoomControl = ttk.Frame(imageCanvasFrame)
         ttk.Button(zoomControl, text="+", command=self.zoomin, style='X.TButton', width=2).pack(side=tk.RIGHT)
         ttk.Button(zoomControl, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.RIGHT)
         zoomControl.place(x=5, y=5)#.pack(side=tk.TOP, padx=5, pady=5)
 
-        self.controlPanelFrame = ttk.Frame(self.parentFrame)
+        # Control panel on right
+        controlPanelFrame = ttk.Frame(parentFrame)
 
-        self.histoCanvas=tk.Canvas(self.controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
+        # On / Off Button
+        self.on_icon = tk.PhotoImage(file='icons/on.png')
+        self.off_icon = tk.PhotoImage(file='icons/off.png')
+        self.connectBtn = ttk.Button(controlPanelFrame, image=self.on_icon, command=self.toggleconnect)
+        self.connectBtn.place(rely=0.0, relx=1.0, x=0, y=0, anchor=tk.NE)
+
+        # Histogram
+        self.histoCanvas=tk.Canvas(controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
         self.histoCanvas.pack(side=tk.TOP)
 
-        ttk.Label(self.controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
-        observationFrame = ttk.Frame(self.controlPanelFrame)
-        ttk.Label(observationFrame, text="Observation ").grid(row=0, column=0, padx=5)
-        ttk.Button(observationFrame, textvariable=self.obsObject, command=self.obs_popup).grid(row=0, column=1, padx=5)
-        observationFrame.pack(fill=tk.X, side=tk.TOP, pady=5)
+        # Status message
+        ttk.Label(controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
 
-        self.rightControlFrame = ttk.Frame(self.controlPanelFrame, padding=5, relief='raised')
-        self.setupFocuserThermo(self.rightControlFrame)
-        self.rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
+        # Focuser and thermal controls
+        rightControlFrame = ttk.Frame(controlPanelFrame, padding=5, relief='raised')
+        self.setupFocuserThermo(rightControlFrame)
+        rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
-        self.leftControlFrame=ttk.Frame(self.controlPanelFrame, padding=5, relief='raised')
-        self.setupControlBoard(self.leftControlFrame)
-        self.leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
+        # Imaging controls
+        leftControlFrame=ttk.Frame(controlPanelFrame, padding=5, relief='raised')
+        self.setupControlBoard(leftControlFrame)
+        leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
-        self.controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
-
-        self.parentFrame.pack(fill=tk.BOTH, expand=True)
+        controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
+        parentFrame.pack(fill=tk.BOTH, expand=True)
 
     def setupFocuserThermo(self, frame):
+        # Thermal
         tempFrame = ttk.Frame(frame)
         ttk.Button(tempFrame, text="Cool", command=self.coolCamera).pack(side=tk.LEFT, padx=5, pady=5)
         ttk.Label(tempFrame, textvariable=self.cameraTemp).pack(side=tk.LEFT, padx=5, pady=5)
         ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
         tempFrame.pack(fill=tk.X, side=tk.TOP)
-
+        # Cooler & power status
         coolerFrame = ttk.Frame(frame)
         ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
         coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
+        # Focuser controls
         focusFrame = ttk.Frame(frame)
         posFrame = ttk.Frame(focusFrame)
         ttk.Label(posFrame,text="Focuser @").pack(side=tk.LEFT)
@@ -371,48 +387,59 @@ class AstroCam:
         gotoFrame.pack(side=tk.RIGHT)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
 
-
     def setupControlBoard(self, frame):
         settingsFrame = ttk.Frame(frame)
+        # Observation target
+        observationFrame = ttk.Frame(settingsFrame)
+        ttk.Label(observationFrame, text="Observation ").grid(row=0, column=0, padx=5)
+        ttk.Button(observationFrame, textvariable=self.obsObject, command=self.obs_popup).grid(row=0, column=1, padx=5)
+        observationFrame.pack(fill=tk.X, side=tk.TOP, pady=5)
 
+        # Basic imaging controls
         settingsRow1 = ttk.Frame(settingsFrame)
+
+        # Image type
         imagetTypeFrame = ttk.Frame(settingsRow1)
         ttk.Label(imagetTypeFrame, text="Type").pack(side=tk.LEFT)
         ttk.Combobox(imagetTypeFrame, textvariable=self.image_type, values=["Light", "Dark", "Flat", "Bias"], state='readonly', width=5, font=self.EntryFont).pack(side=tk.LEFT)
         imagetTypeFrame.pack(side=tk.LEFT, pady=3)
+
+        # Gain / ISO
         isoFrame = ttk.Frame(settingsRow1)
         ttk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
         ttk.Entry(isoFrame, textvariable=self.iso_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         isoFrame.pack(side=tk.LEFT, pady=3)
 
+        # Shutter / Exposure length
         shutterFrame = ttk.Frame(settingsRow1)
         ttk.Label(shutterFrame,text="Shutter").pack(side=tk.LEFT)
         ttk.Entry(shutterFrame, textvariable=self.exp_time, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         shutterFrame.pack(side=tk.RIGHT, pady=3)
         settingsRow1.pack(fill=tk.X, side=tk.TOP)
 
+        # Number of images / subs
         expFrame = ttk.Frame(settingsFrame)
         ttk.Label(expFrame, text="Subs: ").pack(side=tk.LEFT)
         ttk.Button(expFrame,text="\u2193",command=self.exp_number_down, style='X.TButton', width=2).pack(side=tk.LEFT)
         ttk.Entry(expFrame,textvariable=self.exposure_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         ttk.Button(expFrame,text="\u2191",command=self.exp_number_up, style='X.TButton', width=2).pack(side=tk.LEFT)
         expFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
-        
+
+        # Additional settings
         extrasFrame = ttk.Frame(settingsFrame)
         delayFrame = ttk.Frame(extrasFrame)
         ttk.Label(delayFrame,text="Delay").pack(side=tk.LEFT)
         ttk.Entry(delayFrame, textvariable=self.delay_time, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         delayFrame.pack(fill=tk.X, side=tk.LEFT)
-
         focusShiftFrame = ttk.Frame(extrasFrame)
         ttk.Label(focusShiftFrame,text="Focus Shift").pack(side=tk.LEFT)
         ttk.Entry(focusShiftFrame, textvariable=self.focuser_shift, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
         focusShiftFrame.pack(fill=tk.X, side=tk.RIGHT)
-
         extrasFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
 
         settingsFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
+        # Main buttons to start sequences
         controlFrame = ttk.Frame(frame)
         self.liveviewBtn = ttk.Button(controlFrame,text="LiveView",command=self.startLiveview)
         self.liveviewBtn.grid(row=0, column=0, padx=2, pady=2)
@@ -423,6 +450,7 @@ class AstroCam:
         ttk.Button(controlFrame,text="Stop", command=self.cancel).grid(row=1, column=2, padx=2, pady=2)
         controlFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
+    # Observation settings
     def obs_popup(self):
         win = tk.Toplevel()
         win.wm_title("Window")
@@ -448,7 +476,7 @@ class AstroCam:
         ttk.Button(mainframe, text="OK", command=win.destroy).grid(row=row, column=1, padx=2, pady=2)
         mainframe.pack(fill=tk.BOTH, expand=True)
 
-
+    # Window resize
     def resize(self, event):
         if(event.widget == self.root and
            (self.windowWidth != event.width or self.windowHeight != event.height)):
@@ -460,6 +488,9 @@ class AstroCam:
             # Refit image
             self.displayImage()
             self.displayHistogram()
+
+
+    ##############  Exposures   ###############
 
     def getExposureSettings(self):
         return {
@@ -507,6 +538,8 @@ class AstroCam:
                 self.loadingDone(data)
                 os.unlink(fname)
             self.req_queue.put(None)
+            while self.image_queue.get() is not None:
+                pass
         # Spawn thread
         Thread(target=threadProc, args=[]).start()
 
@@ -625,6 +658,9 @@ class AstroCam:
             except queue.Empty:
                 pass
 
+
+    ################## Image display functions ##################
+
     def zoomin(self):
         self.imageScale += 0.5
         self.displayImage()
@@ -669,6 +705,9 @@ class AstroCam:
             self.histoCanvas.create_line(self.histoData[1], fill="lightgreen")
             self.histoCanvas.create_line(self.histoData[2], fill="white")
 
+
+    ##################### Event Handlers #######################
+
     def coolCamera(self):
         thread = Thread(target=self.camera.coolto, args=[0])
         thread.start()
@@ -678,14 +717,12 @@ class AstroCam:
         thread.start()
 
     def statusPolling(self):
-        self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
-        self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
-        self.focuserPos.set(self.focuser.position)
+        if self.connected:
+            self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
+            self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
+            self.focuserPos.set(self.focuser.position)
 
-        self.root.after(5000, self.statusPolling)
-
-    def startStatusPolling(self):
-        self.root.after_idle(self.statusPolling)
+            self.root.after(5000, self.statusPolling)
 
     def onkeypress(self, event):
         if event.char == 'i':
@@ -700,6 +737,25 @@ class AstroCam:
     def focuserGoto(self):
         self.focuser.goto(self.focuserGotoTgt.get())
 
+    def toggleconnect(self):
+        if self.connected:
+            self.connectBtn['image'] = self.on_icon
+            self.connected = False
+            self.camera.close()
+            self.focuser.close()
+            self.camera = None
+            self.focuser = None
+        else:
+            try:
+                self.camera = Camera(self.cameraModel)
+                self.focuser = Focuser("focus")
+                self.connected = True
+                self.connectBtn['image'] = self.off_icon
+                self.root.after_idle(self.statusPolling)
+            except Exception as err:
+                self.runStatus.set("Unable to connect")
+                return
+
 if __name__ == "__main__":
 
     ap = ArgumentParser()
@@ -711,5 +767,4 @@ if __name__ == "__main__":
     Path(destDir).mkdir(exist_ok=True)
 
     astroCam = AstroCam(str(args.cameraModel), destDir, debug=args.debug)
-    astroCam.startStatusPolling()
     astroCam.root.mainloop()
