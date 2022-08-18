@@ -1,163 +1,25 @@
-from datetime import datetime
 import os
 from pathlib import Path
-import shutil
-import tempfile
 import tkinter as tk
 import tkinter.ttk as ttk
 from turtle import bgcolor
 import rawpy
 from PIL import Image, ImageTk
 import time
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
 import queue
 from threading import Thread
-
 from argparse import ArgumentParser
-
-#from CameraAPI.CameraAPI import Camera
 import numpy as np
 import cv2
-from Alpaca.camera import Camera, Focuser
 from astropy.io import fits
-import random
-import itertools
+from Alpaca.camera import Camera, Focuser
+from snap_process import DummySnapProcess, SnapProcess
 
 DEFAULT_NUM_EXPS = 5
 
 HIST_WIDTH = 250
 HIST_HEIGHT= 200
-
-class DummySnapProcess(Process):
-    def __init__(self, cam: Camera, focuser: Focuser, liveview, input_queue, output_queue, destDir):
-        super().__init__()
-        self.cam = cam
-        self.focuser = focuser
-        self.liveview = liveview
-        self.input_queue = input_queue
-        self.output_queue = output_queue
-        self.destDir = Path(destDir)
-
-    def run(self):
-        try:
-            flist = itertools.cycle(Path(r"D:\Astro\20220812\Light1").glob("*.fit"))
-            while True:
-                exp_job = self.input_queue.get(block=self.liveview)
-                if not exp_job:
-                    break
-                time.sleep(exp_job['exp'])
-                fname = next(flist)
-
-                if 'liveview' in exp_job:
-                    output_fname = tempfile.gettempdir() + f"/liveview_{datetime.now().timestamp()}.fit"
-                    shutil.copy(fname, output_fname)
-                else:
-                    output_fname = str(fname)
-                
-                self.output_queue.put(output_fname)
-
-                if exp_job['focuser_adj']:
-                    self.focuser.movein(exp_job['focuser_adj'])
-
-                if 'frame_delay' in exp_job:
-                    time.sleep(exp_job['frame_delay'])
-
-        except queue.Empty:
-            pass
-        finally:
-            try:
-                self.output_queue.put(None)
-            except:
-                pass
-
-class SnapProcess(Thread):
-    def __init__(self, cam: Camera, focuser: Focuser, liveview, input_queue, output_queue, destDir):
-        super().__init__()
-        self.cam = cam
-        self.focuser = focuser
-        self.liveview = liveview
-        self.input_queue = input_queue
-        self.output_queue = output_queue
-        self.destDir = Path(destDir)
-
-
-    def run(self):
-        try:
-            while True:
-                exp_job = self.input_queue.get(block=self.liveview)
-                if not exp_job:
-                    break
-                self.cam.gain = exp_job['iso']
-                self.cam.start_exposure(exp_job['exp'])
-                date_obs = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-                
-                time.sleep(exp_job['exp'])
-                while not self.cam.imageready:
-                    print('waiting')
-                    time.sleep(1)
-                img = self.cam.downloadimage()
-                temperature = self.cam.temperature
-
-                hdr = fits.Header({
-                    'COMMENT': 'Anand Dinakar',
-                    'OBJECT': exp_job["object_name"],
-                    'INSTRUME': self.cam.name,
-                    'DATE-OBS': date_obs,
-                    'EXPTIME': exp_job['exp'],
-                    'CCD-TEMP': temperature,
-                    'XPIXSZ': self.cam.pixelSize[0], #4.63,
-                    'YPIXSZ': self.cam.pixelSize[1], #4.63,
-                    'XBINNING': self.cam.binning,
-                    'YBINNING': self.cam.binning,
-                    'XORGSUBF': 0,
-                    'YORGSUBF': 0,
-                    'BZERO': 0,
-                    'BSCALE': 1,
-                    'EGAIN': self.cam.egain,
-                    'FOCALLEN': exp_job["focal_length"],
-                    'SWCREATE': 'AstroCAM',
-                    'SBSTDVER': 'SBFITSEXT Version 1.0',
-                    'SNAPSHOT': 1,
-                    'SET-TEMP': self.cam.set_temp,
-                    'IMAGETYP': exp_job['image_type'], #'Light Frame',
-                    'SITELAT': exp_job["latitude"],
-                    'SITELONG': exp_job["longitude"],
-                    'GAIN': exp_job['iso'],
-                    'OFFSET': self.cam.offset,
-                    'BAYERPAT': self.cam.sensor_type.name
-                })
-
-                if 'liveview' in exp_job:
-                    output_fname = tempfile.gettempdir() + f"/liveview_{datetime.now().timestamp()}.fit"
-                else:
-                    sno_file = Path('serial_no.txt')
-                    if sno_file.exists():
-                        serial_no = int(sno_file.read_text())
-                    else:
-                        serial_no = 0
-                    sno_file.write_text(str(serial_no+1))
-
-                    output_fname = self.destDir / f"{exp_job['image_type']}_{serial_no:05d}_{exp_job['exp']}sec_{exp_job['iso']}gain_{temperature}C.fit"
-
-                hdu = fits.PrimaryHDU(img, header=hdr)
-                hdu.writeto(output_fname)
-
-                self.output_queue.put(str(output_fname))
-
-                if exp_job['focuser_adj']:
-                    self.focuser.movein(exp_job['focuser_adj'])
-
-                if 'frame_delay' in exp_job:
-                    time.sleep(exp_job['frame_delay'])
-
-        except queue.Empty:
-            pass
-        finally:
-            try:
-                self.output_queue.put(None)
-            except:
-                pass
-
 
 def loadImageHisto(imageFilename):
     if imageFilename is None:
@@ -236,6 +98,8 @@ class AstroCam:
         self.root.bind("<Configure>", self.resize)
         self.root.bind("<Key>", self.onkeypress)
         self.root.state("zoomed")
+
+
         self.connected = False
         self.camera = None
         self.focuser = None
