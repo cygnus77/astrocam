@@ -22,7 +22,7 @@ class DummySnapProcess(Process):
 
     def run(self):
         try:
-            flist = itertools.cycle(Path(r"D:\Astro\20220812\Light1").glob("*.fit"))
+            flist = itertools.cycle(Path(r"images").glob("*.fit"))
             while True:
                 exp_job = self.input_queue.get(block=self.liveview)
                 if not exp_job:

@@ -6,6 +6,7 @@ import pandas as pd
 import math
 from fwhm import getFWHM_GaussianFitScaledAmp
 from star_centroid import iwc_centroid
+from astropy.io import fits
 
 class StarFinder():
   def __init__(self):
@@ -74,9 +75,20 @@ class StarFinder():
     return R, df
 
   def getStarData(self, fname):
-    with open(fname, "rb") as f:
-      rawimg = rawpy.imread(f)
-      img = rawimg.postprocess()
+    if str(fname)[-3:].lower() == 'nef':
+      with open(fname, "rb") as f:
+        rawimg = rawpy.imread(f)
+        img = rawimg.postprocess()
+    else:
+      f = fits.open(fname)
+      ph = f[0]
+      img = ph.data
+
+      if ph.header['BAYERPAT'] == 'RGGB':
+          deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
+          img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
+          img = (img * 255).astype(np.uint8)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     star_img, bboxes = self.find_stars(gray)
     return {  "image": star_img,
