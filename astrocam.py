@@ -14,72 +14,13 @@ import numpy as np
 import cv2
 from astropy.io import fits
 from Alpaca.camera import Camera, Focuser
-from snap_process import DummySnapProcess, SnapProcess
+from snap_process import DummySnapProcess, ImageData, ProgressData, SnapProcess
+import time
 
 DEFAULT_NUM_EXPS = 5
 
 HIST_WIDTH = 250
 HIST_HEIGHT= 200
-
-def loadImageHisto(imageFilename):
-    if imageFilename is None:
-        return None
-    ext = imageFilename[-3:].lower()
-    if ext == 'nef':
-        raw = rawpy.imread(imageFilename)
-        print(f"Postprocessing {imageFilename}")
-        params = rawpy.Params(demosaic_algorithm = rawpy.DemosaicAlgorithm.AHD,
-            half_size = False,
-            four_color_rgb = False,
-            fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Off,
-            use_camera_wb=True,
-            use_auto_wb=False,
-            #output_color=rawpy.ColorSpace.raw, 
-            #output_bps = 8,
-            user_flip = 0,
-            no_auto_scale = False,
-            no_auto_bright=True
-            #highlight_mode= rawpy.HighlightMode.Clip
-            )
-        rgb = raw.postprocess(params=params)
-        raw.close()
-        print("Creating PIL image")
-        img = Image.fromarray(rgb)
-
-    elif ext == 'fit':
-        f = fits.open(imageFilename)
-        ph = f[0]
-        img = ph.data
-
-        if ph.header['BAYERPAT'] == 'RGGB':
-            deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
-            img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
-            img = (img * 255).astype(np.uint8)
-        img = Image.fromarray(img)
-
-    r, g, b = img.split()
-
-    ##############HISTOGRAM##############
-    print("Computing histo")
-    red = r.histogram()
-    green = g.histogram()
-    blue = b.histogram()
-    sf_y = HIST_HEIGHT / max( [max(red),max(green),max(blue)] )
-    sf_x = HIST_WIDTH / 256
-
-    red_pts = []
-    green_pts = []
-    blue_pts = []
-    for i in range(255):
-        red_pts.append(int(i*sf_x))
-        red_pts.append(HIST_HEIGHT-round(red[i] * sf_y))
-        green_pts.append(int(i*sf_x))
-        green_pts.append(HIST_HEIGHT-round(green[i] * sf_y))
-        blue_pts.append(int(i*sf_x))
-        blue_pts.append(HIST_HEIGHT-round(blue[i] * sf_y))
-
-    params = (img, HIST_WIDTH, HIST_HEIGHT, red_pts, green_pts, blue_pts)
-    return params
 
 
 class AstroCam:
@@ -99,7 +40,6 @@ class AstroCam:
         self.root.bind("<Key>", self.onkeypress)
         self.root.state("zoomed")
 
-
         self.connected = False
         self.camera = None
         self.focuser = None
@@ -107,7 +47,7 @@ class AstroCam:
         self.runningExposures = 0
         self.runningLiveView = False
         self.cancelJob = False
-        self.unscaledImg = None
+        self.scaledImg = None
         self.histoData = None
         self.image_queue = Queue(1000)  
         self.req_queue = Queue(1000)
@@ -161,6 +101,7 @@ class AstroCam:
 
         self.root.style.theme_use('awdark')
         self.root.style.configure("TButton", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
+        self.root.style.configure("TProgressbar", troughcolor='black', background=fgcolor, height=1, relief='flat')
         self.root.style.configure("TFrame", foreground=fgcolor, background=bgcolor)
         self.root.style.configure("TLabel", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
         self.root.style.configure("TCombobox", padding=2, foreground=fgcolor, background=bgcolor, fieldbackground='black', font=self.EntryFont, width=4)
@@ -181,6 +122,7 @@ class AstroCam:
         # Image container
         imageCanvasFrame = ttk.Frame(parentFrame)
         self.imageCanvas = tk.Canvas(imageCanvasFrame, background="#200")
+        self.image_container = None
         hbar=ttk.Scrollbar(imageCanvasFrame, orient=tk.HORIZONTAL)
         hbar.pack(side=tk.BOTTOM, fill=tk.X)
         hbar.config(command=self.imageCanvas.xview)
@@ -210,6 +152,11 @@ class AstroCam:
         # Histogram
         self.histoCanvas=tk.Canvas(controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
         self.histoCanvas.pack(side=tk.TOP)
+        self.histo_lines = None
+        self.histoCanvas.create_rectangle( (0, 0, HIST_WIDTH, HIST_HEIGHT), fill="black")
+        
+        self.exposureProgress = ttk.Progressbar(controlPanelFrame, orient='horizontal', mode='determinate', length=100)
+        self.exposureProgress.pack(fill=tk.X, side=tk.TOP, pady=0)
 
         # Status message
         ttk.Label(controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
@@ -365,7 +312,8 @@ class AstroCam:
             "iso": self.iso_number.get(),
             "exp": self.exp_time.get(),
             'focuser_adj':  self.focuser_shift.get(),
-            'frame_delay':  self.delay_time.get()
+            'frame_delay':  self.delay_time.get(),
+            "image_type": self.image_type.get()
         }
 
     def startExps(self):
@@ -391,16 +339,22 @@ class AstroCam:
             snapProc.start()
             # Add items for each required exposure
             while not self.cancelJob:
-                
                 exp_job = self.getExposureSettings()
                 exp_job['liveview'] = True
                 self.req_queue.put(exp_job)
                 # Get filenames from image queue
-                fname = self.image_queue.get(block=True)
+                imageData = self.image_queue.get(block=True)
+                if isinstance(imageData, ProgressData):
+                    self.updateProgress(imageData)
+                    continue
                 # Update UI
-                data = loadImageHisto(fname)
-                self.loadingDone(data)
-                os.unlink(fname)
+                displayData = self.loadImageHisto(imageData)
+                start_time = time.time_ns()
+                self.loadingDone(displayData)
+                end_time = time.time_ns()
+                print(f"UI time: {(end_time-start_time)/1e9:.3f}")
+                imageData.close()
+
             self.req_queue.put(None)
             while self.image_queue.get() is not None:
                 pass
@@ -412,6 +366,99 @@ class AstroCam:
         self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.runStatus.set(msg)
         self.enableExpButtons(True)
+
+    def loadImageHisto(self, imgData: ImageData):
+        start_time = time.time_ns()
+        if imgData.image is None:
+            ext = imgData.fname[-3:].lower()
+            if ext == 'nef':
+                raw = rawpy.imread(imgData.fname)
+                print(f"Postprocessing {imgData.fname}")
+                params = rawpy.Params(demosaic_algorithm = rawpy.DemosaicAlgorithm.AHD,
+                    half_size = False,
+                    four_color_rgb = False,
+                    fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Off,
+                    use_camera_wb=True,
+                    use_auto_wb=False,
+                    #output_color=rawpy.ColorSpace.raw, 
+                    #output_bps = 8,
+                    user_flip = 0,
+                    no_auto_scale = False,
+                    no_auto_bright=True
+                    #highlight_mode= rawpy.HighlightMode.Clip
+                    )
+
+                end_load_time = time.time_ns()
+
+                img = raw.postprocess(params=params)
+                raw.close()
+
+            elif ext == 'fit':
+                f = fits.open(imgData.fname)
+                ph = f[0]
+                img = ph.data
+
+                end_load_time = time.time_ns()
+                load_time = end_load_time - start_time
+
+                if ph.header['BAYERPAT'] == 'RGGB':
+                    deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
+                    img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
+                    img = (img * 255).astype(np.uint8)
+                else:
+                    raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
+        else:
+            if imgData.image is not None:
+                img = imgData.image
+                end_load_time = start_time
+                load_time = 0
+                if imgData.header['BAYERPAT'] == 'RGGB':
+                    deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
+                    img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
+                    img = (img * 255).astype(np.uint8)
+                else:
+                    raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
+
+        imgCanvasWidth = self.imageCanvas.winfo_width()
+        imgCanvasHeight = self.imageCanvas.winfo_height()
+        imgAspect = img.shape[0] / img.shape[1]
+
+        if imgCanvasWidth * imgAspect <= imgCanvasHeight:
+            w = imgCanvasWidth
+            h = int(imgCanvasWidth * imgAspect)
+        else:
+            h = imgCanvasHeight
+            w = int(imgCanvasHeight / imgAspect)
+
+        img = cv2.resize(img, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
+
+        deb_finish_time = time.time_ns()
+        deb_time = deb_finish_time - end_load_time
+
+        ##############HISTOGRAM##############
+        print("Computing histo")
+        red = np.bincount(img[:,:,0].reshape(-1), minlength=256) #np.histogram(self.scaledImg[:,:,0], bins=list(range(0,256,4)))
+        green = np.bincount(img[:,:,1].reshape(-1), minlength=256) #np.histogram(self.scaledImg[:,:,1], bins=list(range(0,256,4)))
+        blue = np.bincount(img[:,:,2].reshape(-1), minlength=256) #np.histogram(self.scaledImg[:,:,2], bins=list(range(0,256,4)))
+        sf_y = HIST_HEIGHT / np.max([red, green, blue])
+        sf_x = HIST_WIDTH / 256
+
+        red_pts = []
+        green_pts = []
+        blue_pts = []
+        for i in range(len(red)):
+            red_pts.append(int(i*sf_x))
+            red_pts.append(HIST_HEIGHT-round(red[i] * sf_y))
+            green_pts.append(int(i*sf_x))
+            green_pts.append(HIST_HEIGHT-round(green[i] * sf_y))
+            blue_pts.append(int(i*sf_x))
+            blue_pts.append(HIST_HEIGHT-round(blue[i] * sf_y))
+
+        params = (img, red_pts, green_pts, blue_pts)
+
+        histo_time = time.time_ns() - deb_finish_time
+        print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f} - histo_time: {histo_time/1e9:0.3f}")
+        return params
 
     def loadingDone(self, params):
         if self.runningLiveView:
@@ -428,7 +475,12 @@ class AstroCam:
             self.endRunningExposures("Finished")
 
         if params is not None:
-            self.showImageHisto(*params)
+            img, red_pts, green_pts, blue_pts = params
+            self.scaledImg = img
+            self.displayImage()
+            self.histoData = [red_pts, green_pts, blue_pts]
+            self.displayHistogram()
+            self.updateProgress()
 
     def clearInputQueue(self):
         # Clear request queue
@@ -455,6 +507,7 @@ class AstroCam:
         try:
             for _ in range(self.exposure_number.get()):
                 self.req_queue.put(exp_job)
+            self.req_queue.put(None)
         except queue.Full:
             pass
 
@@ -465,8 +518,8 @@ class AstroCam:
 
             # Get filenames from image queue
             while not self.cancelJob:
-                fname = self.image_queue.get()
-                if fname == None:
+                imageData = self.image_queue.get()
+                if imageData == None:
                     # Exit if all exposures are done
                     if self.req_queue.empty():
                         break # done
@@ -478,12 +531,22 @@ class AstroCam:
                         snapProc = self.snapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
                         snapProc.start()
                 else:
+                    if isinstance(imageData, ProgressData):
+                        self.updateProgress(imageData)
+                        continue
                     # Update UI
-                    data = loadImageHisto(fname)
-                    self.loadingDone(data)
+                    displayData = self.loadImageHisto(imageData)
+                    self.loadingDone(displayData)
+                    imageData.close()
 
         # Spawn thread
         Thread(target=threadProc, args=[]).start()
+
+    def updateProgress(self, progressData=None):
+        if progressData is None:
+            self.exposureProgress['value'] = 0
+        else:
+            self.exposureProgress['value'] = int(progressData.progress*100)
 
     def cancel(self):
         self.cancelJob = True
@@ -536,39 +599,25 @@ class AstroCam:
         self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
     def displayImage(self):
-        if self.unscaledImg:
-            imgCanvasWidth = self.imageCanvas.winfo_width()
-            imgCanvasHeight = self.imageCanvas.winfo_height()
-            imgAspect = self.unscaledImg.height / self.unscaledImg.width
-
-            if imgCanvasWidth * imgAspect <= imgCanvasHeight:
-                w = imgCanvasWidth
-                h = int(imgCanvasWidth * imgAspect)
+        if self.scaledImg is not None:
+            ppm_header = f'P6 {self.scaledImg.shape[1]} {self.scaledImg.shape[0]} 255 '.encode()
+            data = ppm_header + self.scaledImg.tobytes()
+            self.imageObject = ImageTk.PhotoImage(width=self.scaledImg.shape[1], height=self.scaledImg.shape[0], data=data, format='PPM')
+            if self.image_container is None:
+                self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
             else:
-                h = imgCanvasHeight
-                w = int(imgCanvasHeight / imgAspect)
-            self.scaledImg = self.unscaledImg.resize((int(w*self.imageScale), int(h*self.imageScale)), Image.ANTIALIAS)
-            self.imageObject = ImageTk.PhotoImage(self.scaledImg)
-            self.imageCanvas.delete("all")
-            self.imageCanvas.create_image((0,0),image=self.imageObject, anchor='nw')
-
-    def showImageHisto(self, img, histoWidth, histoHeight, red_pts, green_pts, blue_pts):
-        self.unscaledImg = img
-        self.displayImage()
-
-        self.histoData = [red_pts, green_pts, blue_pts]
-        self.displayHistogram()
+                self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
 
     def displayHistogram(self):
-        if self.histoData:
-            self.histoCanvas.delete("all")
-            histoCanvasWidth = self.histoCanvas.winfo_width()
-            histoCanvasHeight = self.histoCanvas.winfo_height()
-            self.histoCanvas.create_rectangle( (0, 0, histoCanvasWidth, histoCanvasHeight), fill="black")
-            self.histoCanvas.create_line(self.histoData[0], fill="red")
-            self.histoCanvas.create_line(self.histoData[1], fill="lightgreen")
-            self.histoCanvas.create_line(self.histoData[2], fill="white")
-
+        if self.histoData is not None:
+            if self.histo_lines is None:
+                red_line = self.histoCanvas.create_line(self.histoData[0], fill="red")
+                green_line = self.histoCanvas.create_line(self.histoData[1], fill="lightgreen")
+                blue_line = self.histoCanvas.create_line(self.histoData[2], fill="white")
+                self.histo_lines = [red_line, green_line, blue_line]
+            else:
+                for i in range(3):
+                    self.histoCanvas.coords(self.histo_lines[i], self.histoData[i])
 
     ##################### Event Handlers #######################
 
