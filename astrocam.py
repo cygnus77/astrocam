@@ -2,20 +2,20 @@ import os
 from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
-from turtle import bgcolor
-import rawpy
-from PIL import Image, ImageTk
+
 import time
 from multiprocessing import Queue
 import queue
 from threading import Thread
 from argparse import ArgumentParser
 import numpy as np
-import cv2
-from astropy.io import fits
 from Alpaca.camera import Camera, Focuser
 from snap_process import DummySnapProcess, ImageData, ProgressData, SnapProcess
 import time
+from ui.cooler_widget import CoolerWidget
+from ui.focuser_widget import FocuserWidget
+from ui.histogram_plot import HistogramViewer
+from ui.image_container import ImageViewer
 
 DEFAULT_NUM_EXPS = 5
 
@@ -37,7 +37,6 @@ class AstroCam:
         self.windowHeight = self.root.winfo_screenheight()
         self.root.geometry(f"{self.windowWidth}x{self.windowHeight}")
         self.root.bind("<Configure>", self.resize)
-        self.root.bind("<Key>", self.onkeypress)
         self.root.state("zoomed")
 
         self.connected = False
@@ -47,18 +46,11 @@ class AstroCam:
         self.runningExposures = 0
         self.runningLiveView = False
         self.cancelJob = False
-        self.scaledImg = None
-        self.histoData = None
         self.image_queue = Queue(1000)  
         self.req_queue = Queue(1000)
-        self.imageScale = 1.0
 
         ##############VARIABLES##############
         self.runStatus = tk.StringVar()
-        self.cameraTemp = tk.StringVar()
-        self.cameraCooler = tk.StringVar()
-        self.focuserPos = tk.IntVar()
-        self.focuserGotoTgt = tk.IntVar()
 
         self.iso_number=tk.IntVar()
         self.iso_number.set(120)
@@ -120,25 +112,9 @@ class AstroCam:
         parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
 
         # Image container
-        imageCanvasFrame = ttk.Frame(parentFrame)
-        self.imageCanvas = tk.Canvas(imageCanvasFrame, background="#200")
-        self.image_container = None
-        hbar=ttk.Scrollbar(imageCanvasFrame, orient=tk.HORIZONTAL)
-        hbar.pack(side=tk.BOTTOM, fill=tk.X)
-        hbar.config(command=self.imageCanvas.xview)
-        vbar=ttk.Scrollbar(imageCanvasFrame, orient=tk.VERTICAL)
-        vbar.pack(side=tk.RIGHT, fill=tk.Y)
-        vbar.config(command=self.imageCanvas.yview)
-        self.imageCanvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-        self.imageCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
-        imageCanvasFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
-
-        # Zoom buttons
-        self.root.wm_attributes('-transparentcolor', '#ab23ff')
-        zoomControl = ttk.Frame(imageCanvasFrame)
-        ttk.Button(zoomControl, text="+", command=self.zoomin, style='X.TButton', width=2).pack(side=tk.RIGHT)
-        ttk.Button(zoomControl, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.RIGHT)
-        zoomControl.place(x=5, y=5)#.pack(side=tk.TOP, padx=5, pady=5)
+        imageViewerFrame = ttk.Frame(parentFrame)
+        self.imageViewer = ImageViewer(imageViewerFrame)
+        imageViewerFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
 
         # Control panel on right
         controlPanelFrame = ttk.Frame(parentFrame)
@@ -150,10 +126,9 @@ class AstroCam:
         self.connectBtn.place(rely=0.0, relx=1.0, x=0, y=0, anchor=tk.NE)
 
         # Histogram
-        self.histoCanvas=tk.Canvas(controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
-        self.histoCanvas.pack(side=tk.TOP)
-        self.histo_lines = None
-        self.histoCanvas.create_rectangle( (0, 0, HIST_WIDTH, HIST_HEIGHT), fill="black")
+        histoFrame=tk.Frame(controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
+        self.histoViewer = HistogramViewer(histoFrame, HIST_WIDTH, HIST_HEIGHT)
+        histoFrame.pack(side=tk.TOP)
         
         self.exposureProgress = ttk.Progressbar(controlPanelFrame, orient='horizontal', mode='determinate', length=100)
         self.exposureProgress.pack(fill=tk.X, side=tk.TOP, pady=0)
@@ -163,7 +138,16 @@ class AstroCam:
 
         # Focuser and thermal controls
         rightControlFrame = ttk.Frame(controlPanelFrame, padding=5, relief='raised')
-        self.setupFocuserThermo(rightControlFrame)
+        # Setup cooler controls
+        coolerFrame = ttk.Frame(rightControlFrame)
+        self.coolerWidget = CoolerWidget(coolerFrame, self.camera)
+        coolerFrame.pack(fill=tk.X, side=tk.TOP)
+
+        # Focuser controls
+        focusFrame = ttk.Frame(rightControlFrame)
+        self.focuserWidget = FocuserWidget(focusFrame, self.focuser)
+        self.root.bind("<Key>", self.focuserWidget.onkeypress)
+        focusFrame.pack(fill=tk.X, side=tk.TOP)
         rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
         # Imaging controls
@@ -174,29 +158,6 @@ class AstroCam:
         controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
         parentFrame.pack(fill=tk.BOTH, expand=True)
 
-    def setupFocuserThermo(self, frame):
-        # Thermal
-        tempFrame = ttk.Frame(frame)
-        ttk.Button(tempFrame, text="Cool", command=self.coolCamera).pack(side=tk.LEFT, padx=5, pady=5)
-        ttk.Label(tempFrame, textvariable=self.cameraTemp).pack(side=tk.LEFT, padx=5, pady=5)
-        ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
-        tempFrame.pack(fill=tk.X, side=tk.TOP)
-        # Cooler & power status
-        coolerFrame = ttk.Frame(frame)
-        ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
-        coolerFrame.pack(fill=tk.X, side=tk.TOP)
-
-        # Focuser controls
-        focusFrame = ttk.Frame(frame)
-        posFrame = ttk.Frame(focusFrame)
-        ttk.Label(posFrame,text="Focuser @").pack(side=tk.LEFT)
-        ttk.Label(posFrame,textvariable=self.focuserPos).pack(side=tk.LEFT)
-        posFrame.pack(side=tk.LEFT)
-        gotoFrame = ttk.Frame(focusFrame)
-        ttk.Entry(gotoFrame,textvariable=self.focuserGotoTgt, font=self.EntryFont, width=self.entryWidth).pack(side=tk.RIGHT)
-        ttk.Button(gotoFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.RIGHT)
-        gotoFrame.pack(side=tk.RIGHT)
-        focusFrame.pack(fill=tk.X, side=tk.TOP)
 
     def setupControlBoard(self, frame):
         settingsFrame = ttk.Frame(frame)
@@ -297,12 +258,8 @@ class AstroCam:
             print(f'{event.widget=}: {event.height=}, {event.width=}\n')
             self.windowWidth, self.windowHeight = event.width, event.height
 
-            self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-
-            # Refit image
-            self.displayImage()
-            self.displayHistogram()
-
+            self.imageViewer.onResize()
+            self.histoViewer.onResize()
 
     ##############  Exposures   ###############
 
@@ -351,11 +308,7 @@ class AstroCam:
                     self.updateProgress(imageData)
                     continue
                 # Update UI
-                displayData = self.loadImageHisto(imageData)
-                start_time = time.time_ns()
-                self.loadingDone(displayData)
-                end_time = time.time_ns()
-                print(f"UI time: {(end_time-start_time)/1e9:.3f}")
+                self.loadImageHisto(imageData)
                 imageData.close()
 
             self.req_queue.put(None)
@@ -369,101 +322,12 @@ class AstroCam:
         self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.runStatus.set(msg)
         self.enableExpButtons(True)
+        self.progressData = None
 
     def loadImageHisto(self, imgData: ImageData):
-        start_time = time.time_ns()
-        if imgData.image is None:
-            ext = imgData.fname[-3:].lower()
-            if ext == 'nef':
-                raw = rawpy.imread(imgData.fname)
-                print(f"Postprocessing {imgData.fname}")
-                params = rawpy.Params(demosaic_algorithm = rawpy.DemosaicAlgorithm.AHD,
-                    half_size = False,
-                    four_color_rgb = False,
-                    fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Off,
-                    use_camera_wb=True,
-                    use_auto_wb=False,
-                    #output_color=rawpy.ColorSpace.raw, 
-                    #output_bps = 8,
-                    user_flip = 0,
-                    no_auto_scale = False,
-                    no_auto_bright=True
-                    #highlight_mode= rawpy.HighlightMode.Clip
-                    )
+        img = self.imageViewer.setImage(imgData)
+        self.histoViewer.setImage(img)
 
-                end_load_time = time.time_ns()
-
-                img = raw.postprocess(params=params)
-                raw.close()
-
-            elif ext == 'fit':
-                f = fits.open(imgData.fname)
-                ph = f[0]
-                img = ph.data
-
-                end_load_time = time.time_ns()
-                load_time = end_load_time - start_time
-
-                if ph.header['BAYERPAT'] == 'RGGB':
-                    deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
-                    img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
-                    img = (img * 255).astype(np.uint8)
-                else:
-                    raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
-        else:
-            if imgData.image is not None:
-                img = imgData.image
-                end_load_time = start_time
-                load_time = 0
-                if imgData.header['BAYERPAT'] == 'RGGB':
-                    deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
-                    img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
-                    img = (img * 255).astype(np.uint8)
-                else:
-                    raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
-
-        imgCanvasWidth = self.imageCanvas.winfo_width()
-        imgCanvasHeight = self.imageCanvas.winfo_height()
-        imgAspect = img.shape[0] / img.shape[1]
-
-        if imgCanvasWidth * imgAspect <= imgCanvasHeight:
-            w = imgCanvasWidth
-            h = int(imgCanvasWidth * imgAspect)
-        else:
-            h = imgCanvasHeight
-            w = int(imgCanvasHeight / imgAspect)
-
-        img = cv2.resize(img, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
-
-        deb_finish_time = time.time_ns()
-        deb_time = deb_finish_time - end_load_time
-
-        ##############HISTOGRAM##############
-        print("Computing histo")
-        red = np.bincount(img[:,:,0].reshape(-1), minlength=256) #np.histogram(self.scaledImg[:,:,0], bins=list(range(0,256,4)))
-        green = np.bincount(img[:,:,1].reshape(-1), minlength=256) #np.histogram(self.scaledImg[:,:,1], bins=list(range(0,256,4)))
-        blue = np.bincount(img[:,:,2].reshape(-1), minlength=256) #np.histogram(self.scaledImg[:,:,2], bins=list(range(0,256,4)))
-        sf_y = HIST_HEIGHT / np.max([red, green, blue])
-        sf_x = HIST_WIDTH / 256
-
-        red_pts = []
-        green_pts = []
-        blue_pts = []
-        for i in range(len(red)):
-            red_pts.append(int(i*sf_x))
-            red_pts.append(HIST_HEIGHT-round(red[i] * sf_y))
-            green_pts.append(int(i*sf_x))
-            green_pts.append(HIST_HEIGHT-round(green[i] * sf_y))
-            blue_pts.append(int(i*sf_x))
-            blue_pts.append(HIST_HEIGHT-round(blue[i] * sf_y))
-
-        params = (img, red_pts, green_pts, blue_pts)
-
-        histo_time = time.time_ns() - deb_finish_time
-        print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f} - histo_time: {histo_time/1e9:0.3f}")
-        return params
-
-    def loadingDone(self, params):
         if self.runningLiveView:
             if self.cancelJob:
                 self.endRunningExposures("Stopped Live view")
@@ -477,13 +341,7 @@ class AstroCam:
         else:
             self.endRunningExposures("Finished")
 
-        if params is not None:
-            img, red_pts, green_pts, blue_pts = params
-            self.scaledImg = img
-            self.displayImage()
-            self.histoData = [red_pts, green_pts, blue_pts]
-            self.displayHistogram()
-            self.updateProgress()
+        self.updateProgress()
 
     def clearInputQueue(self):
         # Clear request queue
@@ -542,8 +400,7 @@ class AstroCam:
                         self.updateProgress(imageData)
                         continue
                     # Update UI
-                    displayData = self.loadImageHisto(imageData)
-                    self.loadingDone(displayData)
+                    self.loadImageHisto(imageData)
                     imageData.close()
 
         # Spawn thread
@@ -593,69 +450,14 @@ class AstroCam:
                 pass
 
 
-    ################## Image display functions ##################
-
-    def zoomin(self):
-        self.imageScale += 0.5
-        self.displayImage()
-        self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-
-    def zoomout(self):
-        self.imageScale -= 0.5
-        self.displayImage()
-        self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-
-    def displayImage(self):
-        if self.scaledImg is not None:
-            ppm_header = f'P6 {self.scaledImg.shape[1]} {self.scaledImg.shape[0]} 255 '.encode()
-            data = ppm_header + self.scaledImg.tobytes()
-            self.imageObject = ImageTk.PhotoImage(width=self.scaledImg.shape[1], height=self.scaledImg.shape[0], data=data, format='PPM')
-            if self.image_container is None:
-                self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
-            else:
-                self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
-
-    def displayHistogram(self):
-        if self.histoData is not None:
-            if self.histo_lines is None:
-                red_line = self.histoCanvas.create_line(self.histoData[0], fill="red")
-                green_line = self.histoCanvas.create_line(self.histoData[1], fill="lightgreen")
-                blue_line = self.histoCanvas.create_line(self.histoData[2], fill="white")
-                self.histo_lines = [red_line, green_line, blue_line]
-            else:
-                for i in range(3):
-                    self.histoCanvas.coords(self.histo_lines[i], self.histoData[i])
-
     ##################### Event Handlers #######################
-
-    def coolCamera(self):
-        thread = Thread(target=self.camera.coolto, args=[0])
-        thread.start()
-    
-    def warmCamera(self):
-        thread = Thread(target=self.camera.warmto, args=[25])
-        thread.start()
 
     def statusPolling(self):
         if self.connected:
-            self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
-            self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
-            self.focuserPos.set(self.focuser.position)
+            self.coolerWidget.update()
+            self.focuserWidget.update()
 
             self.root.after(5000, self.statusPolling)
-
-    def onkeypress(self, event):
-        if event.char == 'i':
-            self.focuser.movein(1)
-        elif event.char == 'I':
-            self.focuser.movein(5)
-        elif event.char == 'o':
-            self.focuser.moveout(1)
-        elif event.char == 'O':
-            self.focuser.moveout(5)
-
-    def focuserGoto(self):
-        self.focuser.goto(self.focuserGotoTgt.get())
 
     def toggleconnect(self):
         if self.connected:
