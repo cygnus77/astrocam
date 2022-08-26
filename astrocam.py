@@ -218,13 +218,15 @@ class AstroCam:
         # Gain / ISO
         isoFrame = ttk.Frame(settingsRow1)
         ttk.Label(isoFrame,text="ISO").pack(side=tk.LEFT)
-        ttk.Entry(isoFrame, textvariable=self.iso_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
+        self.isoField = ttk.Entry(isoFrame, textvariable=self.iso_number, font=self.EntryFont, width=self.entryWidth)
+        self.isoField.pack(side=tk.LEFT)
         isoFrame.pack(side=tk.LEFT, pady=3)
 
         # Shutter / Exposure length
         shutterFrame = ttk.Frame(settingsRow1)
         ttk.Label(shutterFrame,text="Shutter").pack(side=tk.LEFT)
-        ttk.Entry(shutterFrame, textvariable=self.exp_time, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
+        self.shutterField = ttk.Entry(shutterFrame, textvariable=self.exp_time, font=self.EntryFont, width=self.entryWidth)
+        self.shutterField.pack(side=tk.LEFT)
         shutterFrame.pack(side=tk.RIGHT, pady=3)
         settingsRow1.pack(fill=tk.X, side=tk.TOP)
 
@@ -232,7 +234,8 @@ class AstroCam:
         expFrame = ttk.Frame(settingsFrame)
         ttk.Label(expFrame, text="Subs: ").pack(side=tk.LEFT)
         ttk.Button(expFrame,text="\u2193",command=self.exp_number_down, style='X.TButton', width=2).pack(side=tk.LEFT)
-        ttk.Entry(expFrame,textvariable=self.exposure_number, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
+        self.numFramesField = ttk.Entry(expFrame,textvariable=self.exposure_number, font=self.EntryFont, width=self.entryWidth)
+        self.numFramesField.pack(side=tk.LEFT)
         ttk.Button(expFrame,text="\u2191",command=self.exp_number_up, style='X.TButton', width=2).pack(side=tk.LEFT)
         expFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
 
@@ -495,6 +498,10 @@ class AstroCam:
         self.startBtn["state"] = newstate
         self.snapshotBtn["state"] = newstate
         self.liveviewBtn["state"] = newstate
+        self.shutterField["state"] = newstate
+        self.isoField["state"] = newstate
+        self.numFramesField["state"] = newstate
+
 
     def startWorker(self):
         self.enableExpButtons(False)

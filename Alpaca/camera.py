@@ -145,7 +145,7 @@ class Camera(AscomDevice):
     if not self.cooler:
       self._put("cooleron", {"CoolerOn": True})
     steps = 0
-    while delta > 3 and steps < 25:
+    while delta > 3 and steps < 50:
       step_end = self.temperature - 1
       self._set_tgt_temp(max(step_end, tgt_temp))
 
@@ -166,7 +166,7 @@ class Camera(AscomDevice):
     if not self.cooler:
       self._put("cooleron", {"CoolerOn": True})
     steps = 0
-    while delta > 3 and steps < 25:
+    while delta > 3 and steps < 50:
       step_end = self.temperature + 1
       self._set_tgt_temp(min(step_end, tgt_temp))
 

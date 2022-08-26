@@ -108,7 +108,7 @@ class SnapProcess(Thread):
         try:
             while True:
                 exp_job = self.input_queue.get(block=self.liveview)
-                if not exp_job:
+                if exp_job is None:
                     break
                 self.cam.gain = exp_job['iso']
                 self.cam.start_exposure(exp_job['exp'])
