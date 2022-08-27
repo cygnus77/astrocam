@@ -121,17 +121,19 @@ class AstroCam:
         # Control panel on right
         controlPanelFrame = ttk.Frame(parentFrame)
 
+        # Histogram
+        histoFrame=tk.Frame(controlPanelFrame, bg='black')
+        self.histoViewer = HistogramViewer(histoFrame)
+        histoFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
+        
+
         # On / Off Button
         self.on_icon = tk.PhotoImage(file='icons/on.png')
         self.off_icon = tk.PhotoImage(file='icons/off.png')
         self.connectBtn = ttk.Button(controlPanelFrame, image=self.on_icon, command=self.toggleconnect)
         self.connectBtn.place(rely=0.0, relx=1.0, x=0, y=0, anchor=tk.NE)
 
-        # Histogram
-        histoFrame=tk.Frame(controlPanelFrame, width=HIST_WIDTH, height=HIST_HEIGHT, bg='black')
-        self.histoViewer = HistogramViewer(histoFrame, HIST_WIDTH, HIST_HEIGHT)
-        histoFrame.pack(side=tk.TOP)
-        
+
         self.exposureProgress = ttk.Progressbar(controlPanelFrame, orient='horizontal', mode='determinate', length=100)
         self.exposureProgress.pack(fill=tk.X, side=tk.TOP, pady=0)
 
@@ -309,13 +311,12 @@ class AstroCam:
         self.root.after(int(job['exp'] * 1000), self.endExposure, job)
 
     def endExposure(self, job):
-        while not self.camera.imageready:
-            print('waiting')
-            time.sleep(0.25)
-
         if self.debug:
             img = self.getNextDebugImage()
         else:
+            while not self.camera.imageready:
+                print('waiting')
+                time.sleep(0.25)
             img = self.camera.downloadimage()
         temperature = self.camera.temperature
 
@@ -493,10 +494,10 @@ class AstroCam:
 
     def getNextDebugImage(self):
         fname = next(self.debug_flist)
-        f = fits.open(fname)
-        ph = f[0]
-        img = ph.data
-        return img
+        with fits.open(fname) as f:
+            ph = f[0]
+            img = ph.data
+            return img
 
 if __name__ == "__main__":
 
