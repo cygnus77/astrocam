@@ -251,16 +251,6 @@ class AstroCam:
         ttk.Button(mainframe, text="OK", command=win.destroy).grid(row=row, column=1, padx=2, pady=2)
         mainframe.pack(fill=tk.BOTH, expand=True)
 
-    # Window resize
-    def resize(self, event):
-        if(event.widget == self.root and
-           (self.windowWidth != event.width or self.windowHeight != event.height)):
-            print(f'{event.widget=}: {event.height=}, {event.width=}\n')
-            self.windowWidth, self.windowHeight = event.width, event.height
-
-            self.imageViewer.onResize()
-            self.histoViewer.onResize()
-
     ##############  Exposures   ###############
 
     def getExposureSettings(self):
@@ -304,9 +294,24 @@ class AstroCam:
         self.camera.gain = job['iso']
         self.camera.start_exposure(job['exp'])
         job['date_obs'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-        self.root.after(int(job['exp'] * 1000), self.endExposure, job)
+        time_ms = int(job['exp'] * 1000)
+        if time_ms >= 1000:
+            self.root.after(1000, self.incrementProgress, job, time_ms)
+        else:
+            self.root.after(time_ms, self.endExposure, job)
+
+    def incrementProgress(self, job, time_left_ms):
+        total_time_ms = int(job['exp'] * 1000)
+        time_completed_ms = total_time_ms - time_left_ms
+        self.updateProgress(ProgressData(time_completed_ms / total_time_ms))
+        time_left_ms -= 1000
+        if time_left_ms >= 1000:
+            self.root.after(1000, self.incrementProgress, job, time_left_ms)
+        else:
+            self.root.after(time_left_ms, self.endExposure, job)
 
     def endExposure(self, job):
+        self.updateProgress(ProgressData(1.0))
         if self.debug:
             img = self.getNextDebugImage()
         else:
@@ -475,6 +480,7 @@ class AstroCam:
             self.focuser.close()
             self.camera = None
             self.focuser = None
+            self.runStatus.set("Disconnected")
         else:
             try:
                 self.camera = Camera(self.cameraModel)
@@ -484,6 +490,7 @@ class AstroCam:
                 self.connected = True
                 self.connectBtn['image'] = self.off_icon
                 self.root.after_idle(self.statusPolling)
+                self.runStatus.set("Connected")
             except Exception as err:
                 self.runStatus.set("Unable to connect")
                 return

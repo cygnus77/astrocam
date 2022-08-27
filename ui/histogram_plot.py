@@ -12,9 +12,6 @@ class HistogramViewer:
     self.histoCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
     self.histImg = None
 
-  def onResize(self):
-    self.update()
-
   def setImage(self, img: np.ndarray):
     start_time = time.time_ns()
     red = np.bincount(img[:,:,0].reshape(-1), minlength=256)
