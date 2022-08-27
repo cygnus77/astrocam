@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from pathlib import Path
 import tkinter as tk
@@ -9,9 +10,11 @@ import queue
 from threading import Thread
 from argparse import ArgumentParser
 import numpy as np
+from astropy.io import fits
 from Alpaca.camera import Camera, Focuser
 from snap_process import DummySnapProcess, ImageData, ProgressData, SnapProcess
 import time
+import itertools
 from ui.cooler_widget import CoolerWidget
 from ui.focuser_widget import FocuserWidget
 from ui.histogram_plot import HistogramViewer
@@ -28,10 +31,9 @@ class AstroCam:
         self.root = tk.Tk()
         self.cameraModel = cameraModel
 
-        if debug:
-            self.snapProcess = DummySnapProcess
-        else:
-            self.snapProcess = SnapProcess
+        self.debug = debug
+        if self.debug:
+            self.debug_flist = itertools.cycle(Path(r"images").glob("*.fit"))
 
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
@@ -273,19 +275,21 @@ class AstroCam:
             "exp": self.exp_time.get(),
             'focuser_adj':  self.focuser_shift.get(),
             'frame_delay':  self.delay_time.get(),
-            "image_type": self.image_type.get()
+            "image_type": self.image_type.get(),
         }
 
     def startExps(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
         self.cancelJob = False
-        self.startWorker()
+        job = self.getExposureSettings()
+        self.startNextExposure(job)
 
     def takeSnapshot(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.exposure_number.set(1)
-        self.startWorker()
+        job = self.getExposureSettings()
+        self.startNextExposure(job)
 
     def startLiveview(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
@@ -294,28 +298,99 @@ class AstroCam:
         self.enableExpButtons(False)
         self.runStatus.set("Live view")
         self.clearInputQueue()
-        def threadProc():
-            snapProc = self.snapProcess(self.camera, self.focuser, True, self.req_queue, self.image_queue, self.destDir)
-            snapProc.start()
-            # Add items for each required exposure
-            while not self.cancelJob:
-                exp_job = self.getExposureSettings()
-                exp_job['liveview'] = True
-                self.req_queue.put(exp_job)
-                # Get filenames from image queue
-                imageData = self.image_queue.get(block=True)
-                if isinstance(imageData, ProgressData):
-                    self.updateProgress(imageData)
-                    continue
-                # Update UI
-                self.loadImageHisto(imageData)
-                imageData.close()
 
-            self.req_queue.put(None)
-            while self.image_queue.get() is not None:
-                pass
-        # Spawn thread
-        Thread(target=threadProc, args=[]).start()
+        job = self.getExposureSettings()
+        self.startNextExposure(job)
+
+    def startNextExposure(self, job):
+        self.camera.gain = job['iso']
+        self.camera.start_exposure(job['exp'])
+        job['date_obs'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        self.root.after(int(job['exp'] * 1000), self.endExposure, job)
+
+    def endExposure(self, job):
+        while not self.camera.imageready:
+            print('waiting')
+            time.sleep(0.25)
+
+        if self.debug:
+            img = self.getNextDebugImage()
+        else:
+            img = self.camera.downloadimage()
+        temperature = self.camera.temperature
+
+        hdr = fits.Header({
+            'COMMENT': 'Anand Dinakar',
+            'OBJECT': job["object_name"],
+            'INSTRUME': self.camera.name,
+            'DATE-OBS': job['date_obs'],
+            'EXPTIME': job['exp'],
+            'CCD-TEMP': temperature,
+            'XPIXSZ': self.camera.pixelSize[0], #4.63,
+            'YPIXSZ': self.camera.pixelSize[1], #4.63,
+            'XBINNING': self.camera.binning,
+            'YBINNING': self.camera.binning,
+            'XORGSUBF': 0,
+            'YORGSUBF': 0,
+            'BZERO': 0,
+            'BSCALE': 1,
+            'EGAIN': self.camera.egain,
+            'FOCALLEN': job["focal_length"],
+            'SWCREATE': 'AstroCAM',
+            'SBSTDVER': 'SBFITSEXT Version 1.0',
+            'SNAPSHOT': 1,
+            'SET-TEMP': self.camera.set_temp,
+            'IMAGETYP': job['image_type'], #'Light Frame',
+            'SITELAT': job["latitude"],
+            'SITELONG': job["longitude"],
+            'GAIN': job['iso'],
+            'OFFSET': self.camera.offset,
+            'BAYERPAT': self.camera.sensor_type.name
+        })
+
+        if not self.runningLiveView:
+            sno_file = Path('serial_no.txt')
+            if sno_file.exists():
+                serial_no = int(sno_file.read_text())
+            else:
+                serial_no = 0
+            sno_file.write_text(str(serial_no+1))
+
+            output_fname = self.destDir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{temperature}C.fit"
+            hdu = fits.PrimaryHDU(img, header=hdr)
+            hdu.writeto(output_fname)
+        else:
+            output_fname = None
+
+        imageData = ImageData(img, output_fname, hdr)
+        img = self.imageViewer.setImage(imageData)
+        self.histoViewer.setImage(img)
+        imageData.close()
+
+        # Start next exposure
+        if self.runningLiveView:
+            if self.cancelJob:
+                self.endRunningExposures("Stopped Live view")
+            else:
+                self.startNextExposure(job)
+                return
+        elif self.runningExposures:
+            if self.cancelJob:
+                self.endRunningExposures("Cancelled")
+                return
+            else:
+                self.exposure_number.set(self.exposure_number.get() - 1)
+            if self.exposure_number.get() == 0:
+                self.endRunningExposures("Finished")
+                return
+            else:
+                self.startNextExposure(job)
+        else:
+            self.endRunningExposures("Finished")
+            return
+
+        self.updateProgress()
+
 
     def endRunningExposures(self, msg):
         self.runningExposures = 0
@@ -324,24 +399,6 @@ class AstroCam:
         self.enableExpButtons(True)
         self.progressData = None
 
-    def loadImageHisto(self, imgData: ImageData):
-        img = self.imageViewer.setImage(imgData)
-        self.histoViewer.setImage(img)
-
-        if self.runningLiveView:
-            if self.cancelJob:
-                self.endRunningExposures("Stopped Live view")
-        elif self.runningExposures:
-            if self.cancelJob:
-                self.endRunningExposures("Cancelled")
-            else:
-                self.exposure_number.set(self.exposure_number.get() - 1)
-            if self.exposure_number.get() == 0:
-                self.endRunningExposures("Finished")
-        else:
-            self.endRunningExposures("Finished")
-
-        self.updateProgress()
 
     def clearInputQueue(self):
         # Clear request queue
@@ -359,52 +416,6 @@ class AstroCam:
         self.shutterField["state"] = newstate
         self.isoField["state"] = newstate
         self.numFramesField["state"] = newstate
-
-
-    def startWorker(self):
-        self.enableExpButtons(False)
-        self.runStatus.set("Taking picture" if self.runningExposures == 0 else "Taking sequence")
-        self.clearInputQueue()
-
-        exp_job = self.getExposureSettings()
-
-        # Add items for each required exposure
-        try:
-            for _ in range(self.exposure_number.get()):
-                self.req_queue.put(exp_job)
-            self.req_queue.put(None)
-        except queue.Full:
-            pass
-
-        def threadProc():
-            # Spawn process
-            snapProc = self.snapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
-            snapProc.start()
-
-            # Get filenames from image queue
-            while not self.cancelJob:
-                imageData = self.image_queue.get()
-                if imageData == None:
-                    # Exit if all exposures are done
-                    if self.req_queue.empty():
-                        break # done
-                    else:
-                        # Restart child process - it may have crashed
-                        while snapProc.is_alive():
-                            time.sleep(1)
-                        print("Restarting camera proc")
-                        snapProc = self.snapProcess(self.camera, self.focuser, False, self.req_queue, self.image_queue, self.destDir)
-                        snapProc.start()
-                else:
-                    if isinstance(imageData, ProgressData):
-                        self.updateProgress(imageData)
-                        continue
-                    # Update UI
-                    self.loadImageHisto(imageData)
-                    imageData.close()
-
-        # Spawn thread
-        Thread(target=threadProc, args=[]).start()
 
     def updateProgress(self, progressData=None):
         if progressData is None:
@@ -471,6 +482,8 @@ class AstroCam:
             try:
                 self.camera = Camera(self.cameraModel)
                 self.focuser = Focuser("focus")
+                self.coolerWidget.camera = self.camera
+                self.focuserWidget.focuser = self.focuser
                 self.connected = True
                 self.connectBtn['image'] = self.off_icon
                 self.root.after_idle(self.statusPolling)
@@ -478,10 +491,17 @@ class AstroCam:
                 self.runStatus.set("Unable to connect")
                 return
 
+    def getNextDebugImage(self):
+        fname = next(self.debug_flist)
+        f = fits.open(fname)
+        ph = f[0]
+        img = ph.data
+        return img
+
 if __name__ == "__main__":
 
     ap = ArgumentParser()
-    ap.add_argument("cameraModel", type=int, choices=[90, 750, 5300, 294])
+    ap.add_argument("cameraModel", type=str, choices=["294", "sim"])
     ap.add_argument("--debug", action='store_true', default=False)
     args = ap.parse_args()
 
