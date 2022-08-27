@@ -6,6 +6,8 @@ from PIL import ImageTk
 from astropy.io import fits
 import cv2
 import numpy as np
+from debayer.bilinear import debayer_bilinear
+from debayer.superpixel import debayer_superpixel
 
 from snap_process import ImageData
 
@@ -99,13 +101,17 @@ class ImageViewer:
             end_load_time = start_time
             load_time = 0
             if imgData.header['BAYERPAT'] == 'RGGB':
-                deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
-                img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
-                img = (img * 255).astype(np.uint8)
+                img = debayer_superpixel(img)
+                # deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB_EA)
+                # img = deb.astype(np.float32) * (255.0 / np.iinfo(deb.dtype).max)
+                # img = img.astype(np.uint8)
             else:
-                raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
+                raise NotImplementedError(f"Unsupported bayer pattern: {imgData.header['BAYERPAT']}")
+            deb_finish_time = time.time_ns()
+            deb_time = deb_finish_time - end_load_time
 
-    imgCanvasWidth, imgCanvasHeight = self.getSize()
+    scale_start_time = deb_finish_time
+    imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
     imgAspect = img.shape[0] / img.shape[1]
 
     if imgCanvasWidth * imgAspect <= imgCanvasHeight:
@@ -117,10 +123,9 @@ class ImageViewer:
 
     self.scaledImg = cv2.resize(img, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
 
-    deb_finish_time = time.time_ns()
-    deb_time = deb_finish_time - end_load_time
-
-    print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}")
+    scale_end_time = time.time_ns()
+    scale_time = scale_end_time - scale_start_time
+    print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}, scale_time: {scale_time/1e9:0.3f}")
 
     self.update()
     return img
@@ -128,6 +133,3 @@ class ImageViewer:
   def onResize(self):
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
     self.update()
-
-  def getSize(self):
-    return self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()

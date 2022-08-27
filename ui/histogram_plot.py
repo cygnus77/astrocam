@@ -1,19 +1,16 @@
 import tkinter as tk
 import tkinter.ttk as ttk
+from PIL import ImageTk, Image
 import numpy as np
 import time
+import cv2
 
 class HistogramViewer:
 
-  def __init__(self, parentFrame, width, height):
-    self.width = width
-    self.height = height
-    self.histoCanvas=tk.Canvas(parentFrame, width=self.width, height=self.height, bg='black')
+  def __init__(self, parentFrame):
+    self.histoCanvas=tk.Canvas(parentFrame, bg='black')
     self.histoCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
-    self.histo_lines = None
-    self.histoCanvas.create_rectangle( (0, 0, self.width, self.height), fill="black")
-    self.histoData = None
-    self.histo_lines = None
+    self.histImg = None
 
   def onResize(self):
     self.update()
@@ -23,32 +20,41 @@ class HistogramViewer:
     red = np.bincount(img[:,:,0].reshape(-1), minlength=256)
     green = np.bincount(img[:,:,1].reshape(-1), minlength=256)
     blue = np.bincount(img[:,:,2].reshape(-1), minlength=256)
-    sf_y = self.height / np.max([red, green, blue])
-    sf_x = self.width / 256
 
-    self.red_pts = []
-    self.green_pts = []
-    self.blue_pts = []
-    for i in range(len(red)):
-        self.red_pts.append(int(i*sf_x))
-        self.red_pts.append(self.height-round(red[i] * sf_y))
-        self.green_pts.append(int(i*sf_x))
-        self.green_pts.append(self.height-round(green[i] * sf_y))
-        self.blue_pts.append(int(i*sf_x))
-        self.blue_pts.append(self.height-round(blue[i] * sf_y))
+    def make_layer(a):
+      ht = 256
+      wd = 256
+      a = a * ht / a.max()
+      a = a.astype(np.uint32)
+      layer = np.zeros((ht, wd), dtype=np.uint8)
+      for i in range(wd):
+        layer[ht-a[i]:ht, i] = 255
+      return layer
+
+    r_layer = make_layer(red)
+    g_layer = make_layer(green)
+    b_layer = make_layer(blue)
+    histImg = np.stack([r_layer, g_layer, b_layer],axis=2)
+
+    imgCanvasWidth, imgCanvasHeight = self.histoCanvas.winfo_width(), self.histoCanvas.winfo_height()
+    imgAspect = img.shape[0] / img.shape[1]
+
+    if imgCanvasWidth * imgAspect <= imgCanvasHeight:
+        w = imgCanvasWidth
+        h = int(imgCanvasWidth * imgAspect)
+    else:
+        h = imgCanvasHeight
+        w = int(imgCanvasHeight / imgAspect)
+
+    self.histImg = cv2.resize(histImg, dsize=(int(w), int(h)), interpolation=cv2.INTER_LINEAR)
+    self.update()
 
     histo_time = time.time_ns() - start_time
     print(f"histo_time: {histo_time/1e9:0.3f}")
+    
 
   def update(self):
-    if self.histoData is not None:
-        if self.histo_lines is None:
-          self.histo_lines = [self.histoCanvas.create_line(pts, fill=color)
-            for pts, color in zip(
-                [self.red_pts, self.green_pts, self.blue_pts],
-                ['red', 'lightgreen, white']
-            )]
-        else:
-            for lines, data in zip(self.histo_lines, [self.red_pts, self.green_pts, self.blue_pts]):
-                self.histoCanvas.coords(lines, data)
+    if self.histImg is not None:
+      self.histImgObject = ImageTk.PhotoImage(image=Image.fromarray(self.histImg))
+      self.histoCanvas.create_image(0, 0, image = self.histImgObject, anchor = tk.NW)
 
