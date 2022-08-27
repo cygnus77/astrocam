@@ -2,7 +2,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 
 from threading import Thread
-from base_widget import BaseWidget
+from ui.base_widget import BaseWidget
 
 
 class CoolerWidget(BaseWidget):
