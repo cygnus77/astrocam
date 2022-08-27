@@ -132,9 +132,6 @@ class ImageViewer:
             load_time = 0
             if imgData.header['BAYERPAT'] == 'RGGB':
                 img = debayer_superpixel(img)
-                # deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB_EA)
-                # img = deb.astype(np.float32) * (255.0 / np.iinfo(deb.dtype).max)
-                # img = img.astype(np.uint8)
             else:
                 raise NotImplementedError(f"Unsupported bayer pattern: {imgData.header['BAYERPAT']}")
             deb_finish_time = time.time_ns()

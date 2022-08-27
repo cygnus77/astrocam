@@ -315,9 +315,9 @@ class AstroCam:
         if self.debug:
             img = self.getNextDebugImage()
         else:
-            while not self.camera.imageready:
-                print('waiting')
-                time.sleep(0.25)
+            if not self.camera.imageready:
+                self.root.after(250, self.endExposure, job)
+                return
             img = self.camera.downloadimage()
         temperature = self.camera.temperature
 
