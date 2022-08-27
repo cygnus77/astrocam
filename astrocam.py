@@ -22,10 +22,6 @@ from ui.image_container import ImageViewer
 
 DEFAULT_NUM_EXPS = 5
 
-HIST_WIDTH = 250
-HIST_HEIGHT= 200
-
-
 class AstroCam:
     def __init__(self, cameraModel, destDir, debug=False):
         self.root = tk.Tk()
@@ -38,7 +34,7 @@ class AstroCam:
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
         self.root.geometry(f"{self.windowWidth}x{self.windowHeight}")
-        self.root.bind("<Configure>", self.resize)
+        
         self.root.state("zoomed")
 
         self.connected = False
@@ -506,8 +502,8 @@ if __name__ == "__main__":
     ap.add_argument("--debug", action='store_true', default=False)
     args = ap.parse_args()
 
-    destDir = ".\images"
-    Path(destDir).mkdir(exist_ok=True)
+    destDir = Path(".\images")
+    destDir.mkdir(exist_ok=True)
 
     astroCam = AstroCam(str(args.cameraModel), destDir, debug=args.debug)
     astroCam.root.mainloop()

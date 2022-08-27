@@ -1,6 +1,8 @@
 TODO:
 - Crosshairs
 - UI code refactor
+- UI element constraints
+- Sub folder by date
 - Histogram stretching
 - Speedup image acquisition
 - FWHM display & tracking

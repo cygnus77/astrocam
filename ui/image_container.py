@@ -14,12 +14,13 @@ from snap_process import ImageData
 class ImageViewer:
 
   def __init__(self, parentFrame):
-    self.scaledImg = None
+    self.image = None
     self.imageScale = 1.0
 
     # Image container
     self.imageCanvas = tk.Canvas(parentFrame, background="#200")
     self.image_container = None
+    self.crosshairs = None
     hbar=ttk.Scrollbar(parentFrame, orient=tk.HORIZONTAL)
     hbar.pack(side=tk.BOTTOM, fill=tk.X)
     hbar.config(command=self.imageCanvas.xview)
@@ -35,25 +36,54 @@ class ImageViewer:
     ttk.Button(zoomControl, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.RIGHT)
     zoomControl.place(x=5, y=5)
 
+    self.imageCanvas.bind("<Configure>", self.resize)
+
   def update(self):
-    if self.scaledImg is not None:
-      ppm_header = f'P6 {self.scaledImg.shape[1]} {self.scaledImg.shape[0]} 255 '.encode()
-      data = ppm_header + self.scaledImg.tobytes()
-      self.imageObject = ImageTk.PhotoImage(width=self.scaledImg.shape[1], height=self.scaledImg.shape[0], data=data, format='PPM')
-      if self.image_container is None:
-          self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
+    if self.image is not None:
+      imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
+      print(imgCanvasWidth, imgCanvasHeight)
+      imgAspect = self.image.shape[0] / self.image.shape[1]
+
+      if imgCanvasWidth * imgAspect <= imgCanvasHeight:
+        w = imgCanvasWidth
+        h = int(imgCanvasWidth * imgAspect)
       else:
-          self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
+        h = imgCanvasHeight
+        w = int(imgCanvasHeight / imgAspect)
+      scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
+      h, w = scaledImg.shape[:2]
+
+      ppm_header = f'P6 {w} {h} 255 '.encode()
+      data = ppm_header + scaledImg.tobytes()
+      self.imageObject = ImageTk.PhotoImage(width=w, height=h, data=data, format='PPM')
+
+      c_x, c_y = w//2, h//2
+      if self.image_container is None:
+        self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
+        self.crosshairs = "crosshairs"
+        crosshairs = [
+          self.imageCanvas.create_oval(c_x-25, c_y-25, c_x+25, c_y+25, outline="red"),
+          self.imageCanvas.create_line(c_x-50, c_y, c_x+50, c_y, fill='red'),
+          self.imageCanvas.create_line(c_x, c_y-50, c_x, c_y+50, fill='red'),
+        ]
+        for item in crosshairs:
+          self.imageCanvas.itemconfig(item, tags=(self.crosshairs))
+      else:
+        self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
+        self.imageCanvas.moveto(self.crosshairs, c_x-25, c_y-25)
+
 
   def zoomin(self):
+    if self.imageScale < 5:
       self.imageScale += 0.5
-      self.update()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+      self.update()
 
   def zoomout(self):
+    if self.imageScale > 0.5:
       self.imageScale -= 0.5
-      self.update()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+      self.update()
 
   def setImage(self, imgData: ImageData):
     start_time = time.time_ns()
@@ -110,26 +140,12 @@ class ImageViewer:
             deb_finish_time = time.time_ns()
             deb_time = deb_finish_time - end_load_time
 
-    scale_start_time = deb_finish_time
-    imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
-    imgAspect = img.shape[0] / img.shape[1]
-
-    if imgCanvasWidth * imgAspect <= imgCanvasHeight:
-        w = imgCanvasWidth
-        h = int(imgCanvasWidth * imgAspect)
-    else:
-        h = imgCanvasHeight
-        w = int(imgCanvasHeight / imgAspect)
-
-    self.scaledImg = cv2.resize(img, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
-
-    scale_end_time = time.time_ns()
-    scale_time = scale_end_time - scale_start_time
-    print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}, scale_time: {scale_time/1e9:0.3f}")
+    self.image = img
+    print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}")
 
     self.update()
-    return img
+    return self.image
 
-  def onResize(self):
+  def resize(self, event):
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
     self.update()
