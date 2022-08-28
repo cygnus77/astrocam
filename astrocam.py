@@ -23,9 +23,10 @@ from ui.image_container import ImageViewer
 DEFAULT_NUM_EXPS = 5
 
 class AstroCam:
-    def __init__(self, cameraModel, destDir, debug=False):
+    def __init__(self, cameraModel, focuserModel, destDir, debug=False):
         self.root = tk.Tk()
         self.cameraModel = cameraModel
+        self.focuserModel = focuserModel
 
         self.debug = debug
         if self.debug:
@@ -484,7 +485,7 @@ class AstroCam:
         else:
             try:
                 self.camera = Camera(self.cameraModel)
-                self.focuser = Focuser("focus")
+                self.focuser = Focuser(self.focuserModel)
                 self.coolerWidget.camera = self.camera
                 self.focuserWidget.focuser = self.focuser
                 self.connected = True
@@ -506,11 +507,12 @@ if __name__ == "__main__":
 
     ap = ArgumentParser()
     ap.add_argument("cameraModel", type=str, choices=["294", "sim"])
+    ap.add_argument("focuserModel", type=str, choices=["celestron", "sim"])
     ap.add_argument("--debug", action='store_true', default=False)
     args = ap.parse_args()
 
     destDir = Path(".\images")
     destDir.mkdir(exist_ok=True)
 
-    astroCam = AstroCam(str(args.cameraModel), destDir, debug=args.debug)
+    astroCam = AstroCam(args.cameraModel, args.focuserModel, destDir, debug=args.debug)
     astroCam.root.mainloop()

@@ -40,8 +40,8 @@ class AscomDevice:
             self.name = name
             return
 
-      except RuntimeError:
-        raise NotFoundErr("Device not found")
+      except RuntimeError as err:
+        pass
     raise NotFoundErr("Device not found")
 
   def close(self):
