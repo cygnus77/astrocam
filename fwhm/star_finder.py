@@ -4,8 +4,8 @@ import cv2
 from tqdm import tqdm
 import pandas as pd
 import math
-from fwhm import getFWHM_GaussianFitScaledAmp
-from star_centroid import iwc_centroid
+from fwhm.fwhm import getFWHM_GaussianFitScaledAmp
+from fwhm.star_centroid import iwc_centroid
 from astropy.io import fits
 
 class StarFinder():
@@ -18,7 +18,7 @@ class StarFinder():
     self.Bm = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(29,29))
     self.Bm[d:d+Bmi.shape[0], d:d+Bmi.shape[0]] -= Bmi
 
-  def find_stars(self, gray: np.ndarray):
+  def find_stars(self, gray: np.ndarray, topk:int=None):
     img_height = gray.shape[0]
     img_width = gray.shape[1]
     K = cv2.morphologyEx(gray, cv2.MORPH_OPEN, self.Bs)
@@ -71,10 +71,13 @@ class StarFinder():
                      'fwhm_y': fwhm_y,
                     })
 
-    df = pd.DataFrame(bboxes)
+    sorted_bboxes = sorted(bboxes, key=lambda x: x['area'], reverse=True)
+    if topk is not None:
+      sorted_bboxes = sorted_bboxes[:topk]
+    df = pd.DataFrame(sorted_bboxes)
     return R, df
 
-  def getStarData(self, fname):
+  def getStarData(self, fname, topk=20):
     if str(fname)[-3:].lower() == 'nef':
       with open(fname, "rb") as f:
         rawimg = rawpy.imread(f)
@@ -90,7 +93,7 @@ class StarFinder():
           img = (img * 255).astype(np.uint8)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    star_img, bboxes = self.find_stars(gray)
+    star_img, bboxes = self.find_stars(gray, topk=topk)
     return {  "image": star_img,
               "stars": bboxes,}
 

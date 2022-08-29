@@ -17,6 +17,7 @@ import time
 import itertools
 from ui.cooler_widget import CoolerWidget
 from ui.focuser_widget import FocuserWidget
+from ui.fwhm_widget import FWHMWidget
 from ui.histogram_plot import HistogramViewer
 from ui.image_container import ImageViewer
 
@@ -30,7 +31,7 @@ class AstroCam:
 
         self.debug = debug
         if self.debug:
-            self.debug_flist = itertools.cycle(Path(r"images").glob("*.fit"))
+            self.debug_flist = itertools.cycle(Path(r"D:\Astro\20220804\M31\light").glob("*.fit"))
 
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
@@ -149,6 +150,12 @@ class AstroCam:
         self.focuserWidget = FocuserWidget(focusFrame, self.focuser)
         self.root.bind("<Key>", self.focuserWidget.onkeypress)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
+
+        # Star stats
+        starStatFrame = ttk.Frame(rightControlFrame)
+        self.fwhmWidget = FWHMWidget(rightControlFrame, self.imageViewer)
+        starStatFrame.pack(fill=tk.BOTH, side=tk.TOP)
+
         rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
         # Imaging controls
@@ -387,12 +394,19 @@ class AstroCam:
                 self.endRunningExposures("Finished")
                 return
             else:
+                # Execute after exposure steps
+                # Focuser step
+                if job['focuser_adj']:
+                    self.focuser.movein(job['focuser_adj'])
+                # Delay step
+                if 'frame_delay' in job:
+                    time.sleep(job['frame_delay'])
+                self.fwhmWidget.update(img)
+                # Trigger next exposure
                 self.startNextExposure(job)
         else:
             self.endRunningExposures("Finished")
             return
-
-        self.updateProgress()
 
 
     def endRunningExposures(self, msg):
@@ -400,7 +414,7 @@ class AstroCam:
         self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.runStatus.set(msg)
         self.enableExpButtons(True)
-        self.progressData = None
+        self.updateProgress()
 
 
     def clearInputQueue(self):

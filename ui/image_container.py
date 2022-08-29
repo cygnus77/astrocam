@@ -16,6 +16,7 @@ class ImageViewer:
   def __init__(self, parentFrame):
     self.image = None
     self.imageScale = 1.0
+    self.highlights = None
 
     # Image container
     self.imageCanvas = tk.Canvas(parentFrame, background="#200")
@@ -47,9 +48,14 @@ class ImageViewer:
       if imgCanvasWidth * imgAspect <= imgCanvasHeight:
         w = imgCanvasWidth
         h = int(imgCanvasWidth * imgAspect)
+        self.scaleX = (imgCanvasWidth*self.imageScale) / self.image.shape[1]
+        self.scaleY = (imgCanvasWidth*imgAspect*self.imageScale) / self.image.shape[0]
       else:
         h = imgCanvasHeight
         w = int(imgCanvasHeight / imgAspect)
+        self.scaleX = ((imgCanvasWidth/imgAspect)*self.imageScale) / self.image.shape[1]
+        self.scaleY = (imgCanvasWidth*self.imageScale) / self.image.shape[0]
+      
       scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
       h, w = scaledImg.shape[:2]
 
@@ -146,3 +152,16 @@ class ImageViewer:
   def resize(self, event):
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
     self.update()
+
+  def highlightStars(self, star_centroids):
+    if self.highlights is not None:
+      self.imageCanvas.delete(self.highlights)
+    else:
+      self.highlights = "highlights"
+    
+    for sc_x, sc_y in star_centroids:
+      sx = sc_x * self.scaleX
+      sy = sc_y * self.scaleY
+      item = self.imageCanvas.create_oval(sx-5, sy-5, sx+5, sy+5, outline="yellow")
+      self.imageCanvas.itemconfig(item, tags=(self.highlights))
+
