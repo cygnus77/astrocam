@@ -48,13 +48,11 @@ class ImageViewer:
       if imgCanvasWidth * imgAspect <= imgCanvasHeight:
         w = imgCanvasWidth
         h = int(imgCanvasWidth * imgAspect)
-        self.scaleX = (imgCanvasWidth*self.imageScale) / self.image.shape[1]
-        self.scaleY = (imgCanvasWidth*imgAspect*self.imageScale) / self.image.shape[0]
       else:
-        h = imgCanvasHeight
         w = int(imgCanvasHeight / imgAspect)
-        self.scaleX = ((imgCanvasWidth/imgAspect)*self.imageScale) / self.image.shape[1]
-        self.scaleY = (imgCanvasWidth*self.imageScale) / self.image.shape[0]
+        h = imgCanvasHeight
+      self.scaleX = (w*self.imageScale) / self.image.shape[1]
+      self.scaleY = (h*self.imageScale) / self.image.shape[0]
       
       scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
       h, w = scaledImg.shape[:2]
