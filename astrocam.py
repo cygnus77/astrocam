@@ -277,6 +277,7 @@ class AstroCam:
     def startExps(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
+        self.runningLiveView = False
         self.cancelJob = False
         job = self.getExposureSettings()
         self.startNextExposure(job)
@@ -284,6 +285,7 @@ class AstroCam:
     def takeSnapshot(self):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.exposure_number.set(1)
+        self.runningLiveView = False
         job = self.getExposureSettings()
         self.startNextExposure(job)
 
@@ -401,7 +403,9 @@ class AstroCam:
                 # Delay step
                 if 'frame_delay' in job:
                     time.sleep(job['frame_delay'])
-                self.fwhmWidget.update(img)
+                
+                if job['image_type'] == 'Light':
+                    self.fwhmWidget.update(img)
                 # Trigger next exposure
                 self.startNextExposure(job)
         else:

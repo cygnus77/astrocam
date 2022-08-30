@@ -80,14 +80,15 @@ class ImageViewer:
   def zoomin(self):
     if self.imageScale < 5:
       self.imageScale += 0.5
-      self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
       self.update()
+      self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def zoomout(self):
     if self.imageScale > 0.5:
       self.imageScale -= 0.5
-      self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
       self.update()
+      self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+      
 
   def setImage(self, imgData: ImageData):
     start_time = time.time_ns()
@@ -148,8 +149,9 @@ class ImageViewer:
     return self.image
 
   def resize(self, event):
-    self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
     self.update()
+    self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+
 
   def highlightStars(self, star_centroids):
     if self.highlights is not None:
