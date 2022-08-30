@@ -368,7 +368,15 @@ class AstroCam:
                 serial_no = 0
             sno_file.write_text(str(serial_no+1))
 
-            output_fname = self.destDir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{temperature}C.fit"
+            now = datetime.now()
+            adj_date = now.day-(1 if now.hour<5 else 0)
+            output_dir = self.destDir / f"{now.year}{now.month:02d}{adj_date:02d}"
+            if job['image_type'] == 'Light':
+                output_dir = output_dir / f"{job['object_name']}/Light"
+            else:
+                output_dir = output_dir / f"{job['image_type']}_{job['exp']}sec_{job['iso']}gain"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_fname = output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{temperature}C.fit"
             hdu = fits.PrimaryHDU(img, header=hdr)
             hdu.writeto(output_fname)
         else:
