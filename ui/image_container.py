@@ -17,6 +17,7 @@ class ImageViewer:
     self.image = None
     self.imageScale = 1.0
     self.highlights = None
+    self.scaledImg = None
 
     # Image container
     self.imageCanvas = tk.Canvas(parentFrame, background="#200")
@@ -31,13 +32,32 @@ class ImageViewer:
     self.imageCanvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
     self.imageCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
 
-    # Zoom buttons
-    zoomControl = ttk.Frame(parentFrame)
-    ttk.Button(zoomControl, text="+", command=self.zoomin, style='X.TButton', width=2).pack(side=tk.RIGHT)
-    ttk.Button(zoomControl, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.RIGHT)
-    zoomControl.place(x=5, y=5)
+    # self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    self.gamma = tk.DoubleVar(value=1.0)
+    self.gammaStr = tk.StringVar(value="1.0")
+    self.updateGammaTable()
+
+    # Buttons
+    imageControlPanel = ttk.Frame(parentFrame)
+    ttk.Button(imageControlPanel, text="+", command=self.zoomin, style='X.TButton', width=2).pack(side=tk.LEFT)
+    ttk.Button(imageControlPanel, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.LEFT)
+    gammaFrame = ttk.Frame(imageControlPanel, width=100)
+    ttk.Label(gammaFrame, textvariable=self.gammaStr).pack(side=tk.LEFT)
+    ttk.Scale(gammaFrame, from_=0.01, to=5, length=100, variable=self.gamma, command=self.onGammaChange, orient=tk.HORIZONTAL).pack(side=tk.LEFT)
+    gammaFrame.pack(side=tk.LEFT)
+    imageControlPanel.place(x=5, y=5)
 
     self.imageCanvas.bind("<Configure>", self.resize)
+
+  def updateGammaTable(self):
+    invGamma = 1.0 / self.gamma.get()
+    self.gamma_table = np.array([((i / 255.0) ** invGamma) * 255
+      for i in np.arange(0, 256)]).astype("uint8")
+    self.gammaStr.set(f"{self.gamma.get():.1f}")
+
+  def onGammaChange(self, ev):
+    self.updateGammaTable()
+    self.displayScaledImg()
 
   def update(self):
     if self.image is not None:
@@ -55,26 +75,47 @@ class ImageViewer:
       self.scaleY = (h*self.imageScale) / self.image.shape[0]
       
       scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
-      h, w = scaledImg.shape[:2]
+      self.scaledImg = scaledImg
+      self.displayScaledImg()
 
-      ppm_header = f'P6 {w} {h} 255 '.encode()
-      data = ppm_header + scaledImg.tobytes()
-      self.imageObject = ImageTk.PhotoImage(width=w, height=h, data=data, format='PPM')
+  def displayScaledImg(self):
+    if self.scaledImg is None:
+      return
+    img = self.scaledImg
+    # Histogram equalize
+    # e_r = cv2.equalizeHist(img[:,:,0])
+    # e_g = cv2.equalizeHist(img[:,:,1])
+    # e_b = cv2.equalizeHist(img[:,:,2])
+    # img = np.stack([e_r, e_g, e_b], axis=2)
 
-      c_x, c_y = w//2, h//2
-      if self.image_container is None:
-        self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
-        self.crosshairs = "crosshairs"
-        crosshairs = [
-          self.imageCanvas.create_oval(c_x-25, c_y-25, c_x+25, c_y+25, outline="red"),
-          self.imageCanvas.create_line(c_x-50, c_y, c_x+50, c_y, fill='red'),
-          self.imageCanvas.create_line(c_x, c_y-50, c_x, c_y+50, fill='red'),
-        ]
-        for item in crosshairs:
-          self.imageCanvas.itemconfig(item, tags=(self.crosshairs))
-      else:
-        self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
-        self.imageCanvas.moveto(self.crosshairs, c_x-25, c_y-25)
+    # e_r = self.clahe.apply(img[:,:,0])
+    # e_g = self.clahe.apply(img[:,:,1])
+    # e_b = self.clahe.apply(img[:,:,2])
+    # img = np.stack([e_r, e_g, e_b], axis=2)
+
+    # img = cv2.convertScaleAbs(img, alpha=2.0, beta=50)
+
+    img = cv2.LUT(img, self.gamma_table)
+
+    h, w = img.shape[:2]
+    ppm_header = f'P6 {w} {h} 255 '.encode()
+    data = ppm_header + img.tobytes()
+    self.imageObject = ImageTk.PhotoImage(width=w, height=h, data=data, format='PPM')
+
+    c_x, c_y = w//2, h//2
+    if self.image_container is None:
+      self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
+      self.crosshairs = "crosshairs"
+      crosshairs = [
+        self.imageCanvas.create_oval(c_x-25, c_y-25, c_x+25, c_y+25, outline="red"),
+        self.imageCanvas.create_line(c_x-50, c_y, c_x+50, c_y, fill='red'),
+        self.imageCanvas.create_line(c_x, c_y-50, c_x, c_y+50, fill='red'),
+      ]
+      for item in crosshairs:
+        self.imageCanvas.itemconfig(item, tags=(self.crosshairs))
+    else:
+      self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
+      self.imageCanvas.moveto(self.crosshairs, c_x-25, c_y-25)
 
 
   def zoomin(self):
