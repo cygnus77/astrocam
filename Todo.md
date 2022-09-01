@@ -1,6 +1,5 @@
 TODO:
-- Sub folder by date
-- Histogram stretching
+- Cooler - ensure thread is run only once * indicate completion
 - Job queue
 - UI code refactor
 - UI element constraints

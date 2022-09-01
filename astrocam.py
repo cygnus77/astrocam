@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pathlib import Path
 import tkinter as tk
@@ -369,8 +369,8 @@ class AstroCam:
             sno_file.write_text(str(serial_no+1))
 
             now = datetime.now()
-            adj_date = now.day-(1 if now.hour<5 else 0)
-            output_dir = self.destDir / f"{now.year}{now.month:02d}{adj_date:02d}"
+            now = now - timedelta(days=1 if now.hour<6 else 0)
+            output_dir = self.destDir / now.strftime("%Y%m%d")
             if job['image_type'] == 'Light':
                 output_dir = output_dir / f"{job['object_name']}/Light"
             else:
