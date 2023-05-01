@@ -10,7 +10,10 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "C:\\code\\astrocam;"
+            }
         },
         {
             "name": "Python: AstroCam",
@@ -19,7 +22,7 @@
             "program": "${workspaceFolder}/astrocam.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
-            "args": ["294", "--debug"]
+            "args": ["sim", "sim", "--debug"]
         }
     ]
 }
