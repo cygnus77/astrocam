@@ -43,12 +43,15 @@ class StarMatcher:
                 continue
             matches.append((s1, s2))
 
-        matches_ref, matches_tgt = [m[0] for m in matches], [m[1] for m in matches]
-
-        matches_ref = df_ref[df_ref.index.isin(matches_ref)].reset_index()
-        matches_tgt = df_tgt[df_tgt.index.isin(matches_tgt)].reset_index()
-
-        frames = pd.merge(left=matches_ref, right=matches_tgt, left_index=True, right_index=True, suffixes=["_ref", "_tgt"])
+        df_tgt['starno'] = None
+        for m1, m2 in matches:
+            df_tgt.loc[m2, 'starno'] = m1
+        frames = pd.merge(left=df_ref,
+                          right=df_tgt[df_tgt.starno.notna()],
+                          left_index=True,
+                          right_on='starno',
+                          how='right',
+                          suffixes=["_ref", "_tgt"])
         frames['fwhm_x_diff'] = frames.fwhm_x_ref - frames.fwhm_x_tgt
         frames['fwhm_y_diff'] = frames.fwhm_y_ref - frames.fwhm_y_tgt
         return frames

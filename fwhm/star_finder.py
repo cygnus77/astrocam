@@ -94,6 +94,8 @@ class StarFinder():
       with open(fname, "rb") as f:
         rawimg = rawpy.imread(f)
         img = rawimg.postprocess()
+        img8 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img16 = (np.iinfo(np.uint16).max * (img8.astype(np.float32) / 255.0)).astype(np.uint16)
       hdr = None
 
     elif ext == '.fit':
@@ -108,16 +110,11 @@ class StarFinder():
         deb = cv2.cvtColor(deb, cv2.COLOR_RGB2GRAY)
         img16 = deb
         img8 = ((deb / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
-        print(f"img16 shape: {img16.shape}, img8 shape: {img8.shape}")
 
     elif ext == '.xisf':
       img, hdr = read_xisf(fname)
       img16 = (np.iinfo(np.uint16).max * img).astype(np.uint16)
       img8 = (np.iinfo(np.uint8).max * img).astype(np.uint8)
-
-    
-    # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
 
     star_mask, bboxes = self.find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=topk)
     return {  "star_mask": star_mask,

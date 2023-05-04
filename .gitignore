@@ -9,3 +9,7 @@ CameraAPI/__pychache__/*
 *.pyc
 dataset/
 weights/
+mlruns/
+ascom.alpaca.simulators.net60/
+fwhm_data/
+images/
