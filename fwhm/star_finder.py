@@ -5,7 +5,7 @@ import cv2
 from tqdm import tqdm
 import pandas as pd
 import math
-from fwhm.fwhm import getFWHM_GaussianFitScaledAmp, fwhm1d, fwhm2d, fitgaussian2d
+from fwhm.fwhm import getFWHM_GaussianFitScaledAmp, fwhm1d, fwhm2d, fitgaussian2d, fwhm
 from fwhm.star_centroid import iwc_centroid
 from astropy.io import fits
 from xisf.xisf_parser import read_xisf
@@ -41,7 +41,7 @@ class StarFinder():
     # print(f"Star dim: {width}, {height}")
 
     bboxes = []
-    for staridx in tqdm(range(1, numstars), desc="Calculating FWHM"):
+    for staridx in range(1, numstars):
       centroid_x, centroid_y = centroids[staridx]
       # Per-star area
       width = stats[staridx, cv2.CC_STAT_WIDTH]
@@ -64,7 +64,8 @@ class StarFinder():
       # fwhm_x, fwhm_y, curve_cx, curve_cy = getFWHM_GaussianFitScaledAmp(star)
       # fwhm_x = fwhm1d(star[int(max_row-min_row)//2, :])
       # fwhm_y = fwhm1d(star[:, int(max_col-min_col)//2])
-      curve_cx, curve_cy, fwhm_y, fwhm_x = fitgaussian2d(star, circular=False, centered=False)
+      ht, curve_cx, curve_cy, sigma_x, sigma_y = fitgaussian2d(star, circular=False, centered=False)
+      fwhm_x, fwhm_y = fwhm(sigma_x), fwhm(sigma_y)
       # fwhm_x, fwhm_y = star.shape
       #fwhm_x, fwhm_y, curve_cx, curve_cy = getFWHM(star)
       bboxes.append({'area':stats[staridx, cv2.CC_STAT_AREA],

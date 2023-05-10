@@ -6,7 +6,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from itertools import combinations, product
 import math
-from tqdm import tqdm
 
 class StarMatcher:
 
@@ -18,7 +17,7 @@ class StarMatcher:
         TRIANGLETOLERANCE = 2e-4
         votes = np.zeros((len(df_ref)+1, len(df_tgt)+1), dtype=np.uint32)
 
-        for tgt in tqdm(tri_tgt.itertuples(), desc="Matching triangles", total=len(tri_tgt)):
+        for tgt in tri_tgt.itertuples():
             ref_matches = tri_ref[(tri_ref.fX >= tgt.fX) & (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE)]
             ref_matches = ref_matches[(ref_matches.fX-tgt.fX)**2 + (ref_matches.fY-tgt.fY)**2 < TRIANGLETOLERANCE**2]
             for ref in ref_matches.itertuples():

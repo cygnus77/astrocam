@@ -146,10 +146,9 @@ def moments(data, circular=False, centered=False):
     sigma_x = np.sqrt(abs((np.arange(col.size)-y)**2*col).sum()/col.sum())
     row = data[int(x), :]
     sigma_y = np.sqrt(abs((np.arange(row.size)-y)**2*row).sum()/row.sum())
-    height = data.max()    
+    height = data.max()
     if circular:
-        sigma_x = (sigma_x + sigma_y)/2
-        sigma_y = (sigma_x + sigma_y)/2
+        sigma_y = sigma_x = (sigma_x + sigma_y)/2
     return height, x, y, sigma_x, sigma_y
 
 
@@ -157,14 +156,49 @@ def fitgaussian2d(data, circular=False, centered=False):
     """ Returns (height, x, y, width_x, width_y)
     the gaussian parameters of a 2D distribution found by a fit"""
     params = moments(data, circular=circular, centered=centered)     
-    errorfunction = lambda p: np.ravel(gaussian2d(*p, circular=circular)(*np.indices(data.shape)) - data)  
+    errorfunction = lambda p: np.ravel(gaussian2d(*p, circular=circular)(*np.indices(data.shape)) - data)
     p, success = opt.leastsq(errorfunction, params)
     if circular: # make sure that we have something sensible to sigma_y
         p[4] = p[3]
-    return p[1], p[2], fwhm(p[3]), fwhm(p[4])
+    return p[0], p[1], p[2], p[3], p[4]
 
 def fwhm(sigma):
     """ Calculates the full width half maximum for a given width
     only makes sense for circular gaussians """
     fwhm = 2 * np.sqrt(2 * np.log(2)) * sigma # standard fcn, see web
     return fwhm
+
+def test_fitgaussian2d():
+    """ Test gaussian fit """
+    import matplotlib.pyplot as plt
+    # Create the gaussian data
+    Xin, Yin = np.mgrid[0:201, 0:201]
+    data = gaussian2d(1, 100, 100, 20, 20, circular=True)(Xin, Yin) + (0.25 * np.random.random(Xin.shape))
+    # Fit the gaussian data
+    params = fitgaussian2d(data, circular=True)
+    fit = gaussian2d(*params, circular=True)(Xin, Yin)
+    print(params)
+    print(fwhm(params[3]), fwhm(params[4]))
+    # Plot the gaussian data and the fit
+    
+    plt.matshow(data)
+    plt.matshow(fit)
+    plt.show()
+
+def test_fwhm():
+    """ Test fwhm """
+    # Create the gaussian data
+    Xin, Yin = np.mgrid[0:201, 0:201]
+    data = gaussian2d(3, 100, 100, 20, 40, circular=True)(Xin, Yin) + np.random.random(Xin.shape)
+    # Fit the gaussian data
+    params = fitgaussian2d(data, circular=True)
+    print(params)
+    print(fwhm(params[3]), fwhm(params[4]))
+    # Plot the gaussian data and the fit
+    import matplotlib.pyplot as plt
+    plt.matshow(data)
+    plt.show()
+
+if __name__ == '__main__':
+    test_fitgaussian2d()
+    # test_fwhm()
