@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
-
+from tkinter import filedialog
 import time
 from multiprocessing import Queue
 import queue
@@ -11,8 +11,8 @@ from threading import Thread
 from argparse import ArgumentParser
 import numpy as np
 from astropy.io import fits
-from Alpaca.camera import Camera, Focuser
-from snap_process import DummySnapProcess, ImageData, ProgressData, SnapProcess
+
+from snap_process import ImageData, ProgressData
 import time
 import itertools
 from ui.cooler_widget import CoolerWidget
@@ -20,14 +20,16 @@ from ui.focuser_widget import FocuserWidget
 from ui.fwhm_widget import FWHMWidget
 from ui.histogram_plot import HistogramViewer
 from ui.image_container import ImageViewer
+from ui.equipment_selector import selectEquipment
+
 
 DEFAULT_NUM_EXPS = 5
 
 class AstroCam:
-    def __init__(self, cameraModel, focuserModel, destDir, debug=False):
+    def __init__(self, camera, focuser, destDir, debug=False):
         self.root = tk.Tk()
-        self.cameraModel = cameraModel
-        self.focuserModel = focuserModel
+        self.camera = camera
+        self.focuser = focuser
 
         self.debug = debug
         if self.debug:
@@ -40,8 +42,6 @@ class AstroCam:
         self.root.state("zoomed")
 
         self.connected = False
-        self.camera = None
-        self.focuser = None
         self.destDir = destDir
         self.runningExposures = 0
         self.runningLiveView = False
@@ -510,8 +510,7 @@ class AstroCam:
             self.runStatus.set("Disconnected")
         else:
             try:
-                self.camera = Camera(self.cameraModel)
-                self.focuser = Focuser(self.focuserModel)
+                self.camera, self.focuser = selectEquipment(self.root)
                 self.coolerWidget.camera = self.camera
                 self.focuserWidget.focuser = self.focuser
                 self.connected = True
@@ -530,15 +529,8 @@ class AstroCam:
             return img
 
 if __name__ == "__main__":
-
-    ap = ArgumentParser()
-    ap.add_argument("cameraModel", type=str, choices=["294", "sim"])
-    ap.add_argument("focuserModel", type=str, choices=["celestron", "sim"])
-    ap.add_argument("--debug", action='store_true', default=False)
-    args = ap.parse_args()
-
     destDir = Path(".\images")
     destDir.mkdir(exist_ok=True)
-
-    astroCam = AstroCam(args.cameraModel, args.focuserModel, destDir, debug=args.debug)
+  
+    astroCam = AstroCam(None, None, destDir)
     astroCam.root.mainloop()

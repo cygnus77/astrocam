@@ -22,7 +22,7 @@
             "program": "${workspaceFolder}/astrocam.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
-            "args": ["sim", "sim", "--debug"]
+            "args": ["294", "sim"]//, "--debug"]
         }
     ]
 }

@@ -75,6 +75,8 @@ class ImageViewer:
       self.scaleY = (h*self.imageScale) / self.image.shape[0]
       
       scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
+      if scaledImg.dtype == np.uint16:
+        scaledImg = (scaledImg / 256).astype(np.uint8)
       self.scaledImg = scaledImg
       self.displayScaledImg()
 
