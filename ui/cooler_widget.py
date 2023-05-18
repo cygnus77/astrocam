@@ -23,6 +23,12 @@ class CoolerWidget(BaseWidget):
     ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
     coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
+  def connect(self, camera):
+    self.camera = camera
+
+  def disconnect(self):
+    self.camera = None
+
   def coolCamera(self):
     thread = Thread(target=self.camera.coolto, args=[0])
     thread.start()
@@ -32,5 +38,6 @@ class CoolerWidget(BaseWidget):
     thread.start()
 
   def update(self):
-    self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
-    self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
+    if self.camera is not None and self.camera.connected:
+      self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
+      self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")

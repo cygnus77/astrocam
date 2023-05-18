@@ -49,7 +49,8 @@ class COMPortSelectionDialog(tk.Toplevel):
 
 class EquipmentSelector(tk.Toplevel):
   
-  def __init__(self, parent, telescope_choices, camera_choices, focuser_choices) -> None:
+  def __init__(self, parent, telescope_choices, camera_choices, focuser_choices,
+               default_telescope:int=0, default_camera:int=0, default_focuser:int=0) -> None:
     super().__init__(parent)
     self.telescope = None
     self.camera = None
@@ -101,9 +102,9 @@ class EquipmentSelector(tk.Toplevel):
     self.title("Equipment Selector")
 
     # Set default values
-    self.telescopeChoice.set(telescope_choices[0])
-    self.cameraChoice.set(camera_choices[0])
-    self.focuserChoice.set(focuser_choices[0])
+    self.telescopeChoice.set(telescope_choices[default_telescope])
+    self.cameraChoice.set(camera_choices[default_camera])
+    self.focuserChoice.set(focuser_choices[default_focuser])
 
 
   def onTelescopeChoice(self, *args):
@@ -135,17 +136,24 @@ class EquipmentSelector(tk.Toplevel):
 
     self.destroy()
 
+selected_telescope_index = 0
+selected_camera_index = 0
+selected_focuser_index = 0
 
 def selectEquipment(parent=None):
+    global selected_telescope_index, selected_camera_index, selected_focuser_index
     TELESCOPE_CHOICES = ['Celestron C11', 'AstroTech EDT115']
     CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
     FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
 
-    equipment_selection = EquipmentSelector(parent, TELESCOPE_CHOICES, CAMERA_CHOICES, FOCUSER_CHOICES)
+    equipment_selection = EquipmentSelector(parent, TELESCOPE_CHOICES, CAMERA_CHOICES, FOCUSER_CHOICES, selected_telescope_index, selected_camera_index, selected_focuser_index)
     equipment_selection.wait_window()
-    print("Telescope:", equipment_selection.telescope)
-    print("Camera:", equipment_selection.camera)
-    print("Focuser:", equipment_selection.focuser)
+    selected_telescope_index = TELESCOPE_CHOICES.index(equipment_selection.telescope)
+    selected_camera_index = CAMERA_CHOICES.index(equipment_selection.camera)
+    selected_focuser_index = FOCUSER_CHOICES.index(equipment_selection.focuser)
+    print("Telescope:", selected_telescope_index)
+    print("Camera:", selected_camera_index)
+    print("Focuser:", selected_focuser_index)
 
     # Instantiate selected camera
     if equipment_selection.camera == "294MC-Native":

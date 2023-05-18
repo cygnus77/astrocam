@@ -3,10 +3,16 @@ class SimulatedFocuser():
 
   def __init__(self):
     super().__init__()
+    self._connected = True
     self._position = 0
 
   def close(self):
+      self._connected = False
       return
+
+  @property
+  def connected(self):
+    return self._connected
 
   @property
   def position(self):

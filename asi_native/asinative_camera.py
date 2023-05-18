@@ -41,6 +41,7 @@ class ASINativeCamera():
         for k in sorted(controls[cn].keys()):
             print('        %s: %s' % (k, repr(controls[cn][k])))
     print()
+    self._connected = True
 
     # Defaults
     self.camera.set_control_value(asi.ASI_BANDWIDTHOVERLOAD, self.camera.get_controls()['BandWidth']['MaxValue'])
@@ -53,12 +54,13 @@ class ASINativeCamera():
     self._buffer = None
 
   def close(self):
+    self._connected = False
     self.camera.close()
 
   """ Camera Info """
   @property
   def connected(self) -> bool:
-    return True
+      return self._connected
   
   @property
   def description(self) -> str:

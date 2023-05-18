@@ -17,17 +17,19 @@ class SensorType(IntEnum):
 class SimulatedCamera():
     def __init__(self, imgSrcFolder) -> None:
         self.dir = Path(imgSrcFolder)
+        self._connected = True
         self._temperature = 22
         self._exp_start_time = None
         self._idx = 0
         self.files = list(self.dir.glob("*.fit"))
 
     def close(self):
+        self._connected = False
         return
     
     @property
     def connected(self) -> bool:
-        return True
+        return self._connected
 
     @property
     def description(self) -> str:
@@ -139,6 +141,8 @@ class SimulatedCamera():
 
     @property
     def imageready(self) -> bool:
+        if not self._connected:
+            return False
         if time.time() - self._exp_start_time > self._durationSec:
             self._exp_start_time = None
             print("Image ready")

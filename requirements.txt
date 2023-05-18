@@ -1,0 +1,7 @@
+lxml
+matplotlib
+numpy
+astropy
+tensorflow
+psutil
+pyserial
