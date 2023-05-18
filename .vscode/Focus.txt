@@ -1,0 +1,66 @@
+Focus
+27875 *
+27827
+27832
+27829 *
+27774 *
+
+
+==================
+
+2022/9/14
+
+29170
+
+2022/9/20
+29165
+29104 - auto decremented, was perfect
+
+9/22/2022
+29092
+
+Bigger number = counter clockwise = Out
+29025
+
+
+2022-10-14 @ 8pm - 29030
+28975 957pm
+
+2022-10-15 740pm - 29130
+29064 @ 950pm
+
+20220-10-18 7:18pm - 28980
+7:20, 7:36, 7:48: 28970
+9:25 - 28940
+10:40 - guess 28910
+
+2022-10-14 @7:14pm 29050
+29005 @ 7:55
+28950 @ 8:54
+28945 @ 10:02
+28929 @ 11:27 auto
+
+
+10/27/2022 8:25pm 29050
+9:50pm 29000
+
+
+10/29/2022 6:46pm 29000
+focus shift 3
+9:10pm 28960
+12:30 28920
+
+11/22/22
+6:37pm 28940 auto step 3
+8:31pm 28859 (auto kept focus perfectly!)
+10:27 - 28763 continueed on auto step 3 -  bad out of focus
+10:29 28850 manually set 
+
+11/23/22
+5:50pm  28980 auto step 3
+8:00pm 28890 (auto kept focus perfectly!), set autostep=0
+9:47 28890 still in focus
+2:00AM 28810 manual
+
+2023/05/15
+9:37pm 29072

@@ -2,7 +2,8 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import messagebox, filedialog
 import serial.tools.list_ports
-
+import psutil
+import time
 
 class COMPortSelectionDialog(tk.Toplevel):
 
@@ -118,7 +119,19 @@ class EquipmentSelector(tk.Toplevel):
   def onOK(self):
     # Ascom devices are selected, prompt user to run Remote Server
     if "ascom" in self.camera.lower() or "ascom" in self.focuser.lower():
-      messagebox.showwarning("ASCOM devices selected", "Please start the ASCOM Remote Server before continuing")
+      if "ASCOM.RemoteServer.exe" not in [p.name() for p in psutil.process_iter()]:
+        p = psutil.Popen(r"ASCOM.RemoteServer.exe", shell=True, cwd=r"C:\Program Files (x86)\ASCOM\Remote")
+        started = False
+        while not started:
+          time.sleep(2)
+          for p in psutil.process_iter():
+            if "ASCOM.RemoteServer.exe" in p.name():
+              if len(p.connections()) == 2:
+                started = True
+                time.sleep(2)
+              break
+        
+        # messagebox.showwarning("ASCOM devices selected", "Please start the ASCOM Remote Server before continuing")
 
     self.destroy()
 
@@ -126,7 +139,7 @@ class EquipmentSelector(tk.Toplevel):
 def selectEquipment(parent=None):
     TELESCOPE_CHOICES = ['Celestron C11', 'AstroTech EDT115']
     CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
-    FOCUSER_CHOICES = ['Celestron-Native', 'Celestron-Ascom', 'None', 'Simulator']
+    FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
 
     equipment_selection = EquipmentSelector(parent, TELESCOPE_CHOICES, CAMERA_CHOICES, FOCUSER_CHOICES)
     equipment_selection.wait_window()
@@ -152,16 +165,9 @@ def selectEquipment(parent=None):
         camera = SimulatedCamera(imageFolder)
 
     # Instantiate selected focuser
-    if equipment_selection.focuser == "Celestron-Native":
-        # if focuser contains native, prompt user for com port and list available com ports
-        comsel = COMPortSelectionDialog(parent)
-        comsel.wait_window()
-        print(comsel.comPort.get())
-        from celestron import Focuser
-        focuser = Focuser()
-    elif equipment_selection.focuser == "Celestron-Ascom":
+    if equipment_selection.focuser == "Celestron-Ascom":
         from Alpaca.camera import Focuser
-        focuser = Focuser()
+        focuser = Focuser("Celestron")
     elif equipment_selection.focuser == "None":
         focuser = None
     elif equipment_selection.focuser == "Simulator":
