@@ -23,10 +23,14 @@ class FWHMWidget(BaseWidget):
     self.df_ref = None
     self.df_fwhm = None
 
-  def update(self, img: np.ndarray):
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+  def update(self, img16: np.ndarray):
+    assert(img16.dtype == np.uint16)
+    assert(len(img16.shape) == 3)
+    assert(img16.shape[2] == 3)
+    img16 = cv2.cvtColor(img16, cv2.COLOR_RGB2GRAY)
+    img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
     numStars = 40 if self.df_ref is None else 10
-    star_img, df_tgt = self.starFinder.find_stars(img, topk=numStars)
+    star_img, df_tgt = self.starFinder.find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
     if self.df_ref is None:
       self.df_ref = df_tgt
 

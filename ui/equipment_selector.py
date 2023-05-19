@@ -127,7 +127,7 @@ class EquipmentSelector(tk.Toplevel):
           time.sleep(2)
           for p in psutil.process_iter():
             if "ASCOM.RemoteServer.exe" in p.name():
-              if len(p.connections()) == 2:
+              if len(p.connections()) >= 1:
                 started = True
                 time.sleep(2)
               break
@@ -142,9 +142,9 @@ selected_focuser_index = 0
 
 def selectEquipment(parent=None):
     global selected_telescope_index, selected_camera_index, selected_focuser_index
-    TELESCOPE_CHOICES = ['Celestron C11', 'AstroTech EDT115']
-    CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
-    FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
+    TELESCOPE_CHOICES = ['Gemini-Ascom', 'Simulator-Ascom']
+    CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator-Ascom']
+    FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator-Ascom']
 
     equipment_selection = EquipmentSelector(parent, TELESCOPE_CHOICES, CAMERA_CHOICES, FOCUSER_CHOICES, selected_telescope_index, selected_camera_index, selected_focuser_index)
     equipment_selection.wait_window()
@@ -154,6 +154,14 @@ def selectEquipment(parent=None):
     print("Telescope:", selected_telescope_index)
     print("Camera:", selected_camera_index)
     print("Focuser:", selected_focuser_index)
+
+    # Instantiate selected telescope
+    if equipment_selection.telescope == "Gemini-Ascom":
+      from Alpaca.mount import Mount
+      mount = Mount("Gemini")
+    elif equipment_selection.camera == "Simulator":
+      from Alpaca.mount import Mount
+      mount = Mount("Simulator")
 
     # Instantiate selected camera
     if equipment_selection.camera == "294MC-Native":
@@ -174,7 +182,7 @@ def selectEquipment(parent=None):
 
     # Instantiate selected focuser
     if equipment_selection.focuser == "Celestron-Ascom":
-        from Alpaca.camera import Focuser
+        from Alpaca.focuser import Focuser
         focuser = Focuser("Celestron")
     elif equipment_selection.focuser == "None":
         focuser = None
@@ -182,7 +190,7 @@ def selectEquipment(parent=None):
         from simulated_devices.simulated_focuser import SimulatedFocuser
         focuser = SimulatedFocuser()
 
-    return camera, focuser
+    return mount, camera, focuser
 
 
 if __name__ == "__main__":

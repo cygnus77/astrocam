@@ -1,5 +1,6 @@
 from pathlib import Path
-from Alpaca.camera import Camera, Focuser
+from Alpaca.camera import Camera
+from Alpaca.focuser import Focuser
 from multiprocessing import Process, Queue
 import queue
 from threading import Thread

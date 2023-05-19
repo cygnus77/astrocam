@@ -505,8 +505,10 @@ class AstroCam:
 
             self.connectBtn['image'] = self.on_icon
             self.connected = False
+            self.mount.close()
             self.camera.close()
             self.focuser.close()
+            self.mount = None
             self.camera = None
             self.focuser = None
             self.focuserWidget.disconnect()
@@ -514,7 +516,7 @@ class AstroCam:
             self.runStatus.set("Disconnected")
         else:
             try:
-                self.camera, self.focuser = selectEquipment(self.root)
+                self.mount, self.camera, self.focuser = selectEquipment(self.root)
                 self.focuserWidget.connect(self.focuser)
                 self.coolerWidget.connect(self.camera)
                 self.connected = True

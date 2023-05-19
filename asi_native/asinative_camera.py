@@ -48,7 +48,7 @@ class ASINativeCamera():
     self.camera.disable_dark_subtract()
     self.camera.stop_video_capture()
     self.camera.stop_exposure()
-    self.camera.set_image_type(asi.ASI_IMG_RGB24)
+    self.camera.set_image_type(asi.ASI_IMG_RAW16)
     self.gain = 121
     self.offset = 30
     self._buffer = None
@@ -158,8 +158,8 @@ class ASINativeCamera():
     return self.camera.get_control_value(asi.ASI_TARGET_TEMP)[0]
 
   @set_temp.setter
-  def set_temp(self, value: float):
-    self.camera.set_control_value(asi.ASI_TARGET_TEMP, value)
+  def set_temp(self, value: int):
+    self.camera.set_control_value(asi.ASI_TARGET_TEMP, int(value))
 
   """ Exposure """
   def start_exposure(self, durationSec: float, light: bool = True):
