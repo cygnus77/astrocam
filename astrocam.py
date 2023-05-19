@@ -1,39 +1,34 @@
-from datetime import datetime, timedelta
-import os
-from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
-from tkinter import filedialog
+
+from datetime import datetime, timedelta
 import time
-from multiprocessing import Queue
-import queue
-from threading import Thread
-from argparse import ArgumentParser
-import numpy as np
-from astropy.io import fits
+from pathlib import Path
 
 from snap_process import ImageData, ProgressData
-import time
-import itertools
+
+from multiprocessing import Queue
+import queue
+
 from ui.cooler_widget import CoolerWidget
 from ui.focuser_widget import FocuserWidget
 from ui.fwhm_widget import FWHMWidget
 from ui.histogram_plot import HistogramViewer
 from ui.image_container import ImageViewer
 from ui.equipment_selector import selectEquipment
+from ui.mount_status_widget import MountStatusWidget
+
+from astropy.io import fits
 
 
 DEFAULT_NUM_EXPS = 5
 
 class AstroCam:
-    def __init__(self, camera, focuser, destDir, debug=False):
+    def __init__(self, destDir):
         self.root = tk.Tk()
-        self.camera = camera
-        self.focuser = focuser
-
-        self.debug = debug
-        if self.debug:
-            self.debug_flist = itertools.cycle(Path(r"D:\Astro\20220804\M31\light").glob("*.fit"))
+        self.mount = None
+        self.camera = None
+        self.focuser = None
 
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
@@ -150,6 +145,11 @@ class AstroCam:
         self.focuserWidget = FocuserWidget(focusFrame, self.focuser)
         self.root.bind("<Key>", self.focuserWidget.onkeypress)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
+
+        # Setup mount status
+        mountStatusFrame = ttk.Frame(rightControlFrame)
+        self.mountStatusWidget = MountStatusWidget(mountStatusFrame, self.mount)
+        mountStatusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Star stats
         starStatFrame = ttk.Frame(rightControlFrame)
@@ -493,6 +493,7 @@ class AstroCam:
 
     def statusPolling(self):
         if self.connected:
+            self.mountStatusWidget.update()
             self.coolerWidget.update()
             self.focuserWidget.update()
 
@@ -511,12 +512,14 @@ class AstroCam:
             self.mount = None
             self.camera = None
             self.focuser = None
+            self.mountStatusWidget.disconnect()
             self.focuserWidget.disconnect()
             self.coolerWidget.disconnect()
             self.runStatus.set("Disconnected")
         else:
             try:
                 self.mount, self.camera, self.focuser = selectEquipment(self.root)
+                self.mountStatusWidget.connect(self.mount)
                 self.focuserWidget.connect(self.focuser)
                 self.coolerWidget.connect(self.camera)
                 self.connected = True
@@ -527,16 +530,9 @@ class AstroCam:
                 self.runStatus.set("Unable to connect")
                 return
 
-    def getNextDebugImage(self):
-        fname = next(self.debug_flist)
-        with fits.open(fname) as f:
-            ph = f[0]
-            img = ph.data
-            return img
-
 if __name__ == "__main__":
     destDir = Path(".\images")
     destDir.mkdir(exist_ok=True)
   
-    astroCam = AstroCam(None, None, destDir)
+    astroCam = AstroCam(destDir)
     astroCam.root.mainloop()
