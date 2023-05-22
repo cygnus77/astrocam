@@ -2,6 +2,8 @@ import tkinter as tk
 import tkinter.ttk as ttk
 
 from ui.base_widget import BaseWidget
+from astropy.coordinates import SkyCoord
+import requests
 
 GREEN_CHECK = u'\u2713'
 EXCLAMATION = u'\u2757'
@@ -33,7 +35,7 @@ class MountStatusWidget(BaseWidget):
             self.statusIcon.set(EXCLAMATION)
 
         coord = self.device.coordinates
-        self.radec.set(coord.to_string("hmsdms"))
+        self.radec.set(self.getName(coord))
 
     def connect(self, device):
         self.device = device
@@ -43,3 +45,13 @@ class MountStatusWidget(BaseWidget):
         self.device = None
         self.radec.set("")
         self.statusIcon.set(STOP)
+
+    def getName(coord: SkyCoord):
+        result = ""
+        result += coord.to_string("hmsdms")
+
+        resp = requests.get('http://simbad.u-strasbg.fr/simbad/sim-coo', params={'output.format': 'ASCII', 'Coord': coord.to_string('hmsdms'), 'Radius': '0.1'})
+        if resp.status_code == 200:
+            
+
+        return result
