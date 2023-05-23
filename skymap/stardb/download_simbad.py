@@ -1,21 +1,27 @@
 import requests
 from tqdm import tqdm
 import numpy as np
+from urllib.parse import quote
 
-query_template = """https://simbad.u-strasbg.fr/simbad/sim-sam?Criteria=Vmag%3c{0}%26dec%20%20%20%3e-30%26rah%3e%3d{1}%26rah%3c{2}&submit=submit%20query&OutputMode=LIST&maxObject=20000&CriteriaFile=&output.format=ASCII"""
+query_template = """https://simbad.u-strasbg.fr/simbad/sim-sam"""
 
-cookie = "H4sIAAAAAAAAAD1Ry26DMBD8lpV6I0jYEKndG0FtRB85lKhST1XwQ6EymAJBab++Y1B7sWZn1uOdta9jcmNEneaKXB/TMKuIrGPySsY4RESu8Vzkx+eyOkKeI6onKOit0epbzQfyNoKkQY+BgvQJBwPva0yT5jdSWvAoSY1wVVquOA04DXiYfyI6895MYDLWQRXh/Qx+Cn3mK2OZJAmA+ANyBartg56yuNsmZD2T0yc83WJMh3z1mXPnyM0oO5TfgsUtOv1SSL5Rl2Ew3fRuTgN53PTwyKuiLD+O+Y78GQxiuOA5Ib3muqm7S0s25YenjBzC24z3J0dWcFm8VuQnH5OVkLdkr5zBsgERBsJyXHAM07QKszbY8BIzzOvb6xIqAa/4ZXPYF5tD/nKPFqzDhU248DGmz/hxXUOf8m5Jbnr5z4kV/QKiiDab3wEAAA=="
+cookie = "H4sIAAAAAAAAAD1R0U6DQBD8lk18oyTcQRPdNyTaoLYPYkx8hDtIMQuHQEn1652D6AuZnV1mZ/ZcFZJMAfWWC5IhoHExATXC5IwO8VEBSes4S99e8uIN7SWgakYHsxVGXWf5RK7xf1rQk6dCqj6hUEP7GtJs+Z2MVTxpMhNUjdUbjj2OPR6Xn4DOfKhnMAlb31V+fwI9g7n6K2EdRRGA+gN6A6YbfD9mdbePqHFMYkus7mBTkK86cypCsqDsUX4rVreYdGuh+cZcxrHu54+6HMmVWAiNtMjynNwZHhBBwMqMxJartuovHTUxPz4nJAjeJHwohRrFefZakJtdSI1Ge0/NlRPItSC8GRxGvKJ30hn4bCG7RvReXXddA0XgDR93p0O2O6XHB4zgFOKvIP5R6iHhp+0EQ8z3a+p60P+c2tAvpH38cdsBAAA="
 
 if __name__ == "__main__":
   step_size = 0.25 # RAH
   mag_limit = 11
   for segid, ra in tqdm(enumerate(np.arange(0, 24, step_size))):
-    if segid < 78:
-      continue
-    with open(f"simbad_data_{segid}.vot", "wt", encoding='utf-8') as f:
-      url = query_template.format(mag_limit, ra, ra+step_size)
-      resp = requests.get(url, cookies={"simbadOptions": cookie})
-      if resp.status_code == 200:
-        f.write(resp.text)
-      else:
-        print(f"Error with ra: {ra}!")
+    for hemisphere,dec_cond in [("nh", "dec>=0"), ("sh", "dec<0")]:
+      with open(f"simbad_{hemisphere}_{segid}.txt", "wt", encoding='utf-8') as f:
+        url = query_template.format(mag_limit, ra, ra+step_size)
+        resp = requests.get(url, cookies={"simbadOptions": cookie}, params={
+          "Criteria": f"Vmag<{mag_limit}&{dec_cond}&rah>={ra}&rah<{ra+step_size}",
+          "submit": "submit%20query",
+          "OutputMode": "LIST",
+          "maxObject": "20000",
+          "output.format": "ASCII",
+        })
+        if resp.status_code == 200:
+          f.write(resp.text)
+        else:
+          print(f"Error with ra: {ra}!")
