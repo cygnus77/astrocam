@@ -5,3 +5,4 @@ astropy
 tensorflow
 psutil
 pyserial
+astroquery
