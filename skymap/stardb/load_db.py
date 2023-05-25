@@ -86,4 +86,6 @@ if __name__ == "__main__":
   with MongoClient("localhost") as mon:
     db = mon.stars
     db.stars.insert_many(objects_in_the_sky.values(), ordered=False)
+    # Create index  db.stars.createIndex({"icrs.location": "2dsphere"})
+    db.command({"createIndexes": "stars", "indexes": [{"key": {"location": "2dsphere"}}]})
     mon.close()
