@@ -139,7 +139,7 @@ selected_focuser_index = 0
 
 def selectEquipment(parent=None):
     global selected_mount_index, selected_camera_index, selected_focuser_index
-    MOUNT_CHOICES = ['Gemini-Ascom', 'Simulator']
+    MOUNT_CHOICES = ['Gemini-Ascom', 'Simulator', 'Simulator-Ascom']
     CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
     FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
 
@@ -156,9 +156,12 @@ def selectEquipment(parent=None):
     if equipment_selection.mount == "Gemini-Ascom":
       from Alpaca.mount import Mount
       mount = Mount("Gemini")
-    elif equipment_selection.camera == "Simulator":
+    elif equipment_selection.mount == "Simulator":
       from simulated_devices.simulated_mount import SimulatedMount
       mount = SimulatedMount()
+    elif equipment_selection.mount == "Simulator-Ascom":
+      from Alpaca.mount import Mount
+      mount = Mount("Simulator")
 
     # Instantiate selected camera
     if equipment_selection.camera == "294MC-Native":

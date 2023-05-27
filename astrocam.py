@@ -1,3 +1,4 @@
+import traceback
 import tkinter as tk
 import tkinter.ttk as ttk
 
@@ -527,6 +528,7 @@ class AstroCam:
                 self.root.after_idle(self.statusPolling)
                 self.runStatus.set("Connected")
             except Exception as err:
+                traceback.print_exc()
                 self.runStatus.set("Unable to connect")
                 return
 

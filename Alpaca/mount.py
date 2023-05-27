@@ -8,6 +8,7 @@ import time
 import typing as T
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+from astropy.coordinates import ICRS
 
 from Alpaca.alpaca_base import AscomDevice
 
@@ -19,7 +20,7 @@ class Mount(AscomDevice):
     def coordinates(self) -> SkyCoord:
         ra = self._get("rightascension")
         dec = self._get("declination")
-        return SkyCoord(ra * u.degree, dec * u.degree)
+        return SkyCoord(ra * u.degree, dec * u.degree, frame=ICRS)
 
     @property
     def site_lat(self):

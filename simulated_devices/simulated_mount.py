@@ -1,14 +1,18 @@
 from astropy import units as u
-from astropy.coordinates import ICRS, Galactic
+from astropy.coordinates import ICRS
 from astropy.coordinates import SkyCoord, Latitude, Longitude
 
 class SimulatedMount():
     
     def __init__(self) -> None:
-        self._coordinates = SkyCoord("14h15m39.7s +19d10m56s", frame=Galactic)
+        # 14 15 39.67207	+19 10 56.6730
+        self._coordinates = SkyCoord("14h15m39.67s +19d10m56.67s", frame=ICRS)
         self._site = SkyCoord(Longitude([-74, 20, 42], unit=u.deg),
                               Latitude([40, 51, 55], unit=u.deg),
-                             frame=ICRS)
+                              frame=ICRS)
+        return
+    
+    def close(self):
         return
     
     @property

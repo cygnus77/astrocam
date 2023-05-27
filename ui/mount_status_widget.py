@@ -1,6 +1,7 @@
 import tkinter as tk
 import tkinter.ttk as ttk
-
+from skymap.skymap import SkyMap
+import psutil
 from ui.base_widget import BaseWidget
 from astropy.coordinates import SkyCoord
 import requests
@@ -12,6 +13,7 @@ STOP = u'\u25CF'
 class MountStatusWidget(BaseWidget):
     def __init__(self, parentFrame, device) -> None:
         super().__init__()
+        self._connectSkyMap()
         self.device = device
         statusFrame = ttk.Frame(parentFrame)
         # Textbox to show coordinates
@@ -24,6 +26,15 @@ class MountStatusWidget(BaseWidget):
 
         self.update()
     
+    def _connectSkyMap(self):
+        try:
+            if "mongod.exe" not in [p.name() for p in psutil.process_iter()]:
+                psutil.Popen([r"mongod.exe", "--dbpath", r"D:\skymapdata"], shell=True, cwd=r"C:\code\astrocam\skymap\stardb")
+            self.skyMap = SkyMap()
+        except Exception as ex:
+            print(f"Failed to connect to SkyMap: {ex}")
+            self.skyMap = None
+
     def update(self):
         if self.device is None:
             return
@@ -35,7 +46,10 @@ class MountStatusWidget(BaseWidget):
             self.statusIcon.set(EXCLAMATION)
 
         coord = self.device.coordinates
-        self.radec.set(self.getName(coord))
+        coord_txt = coord.to_string("hmsdms")
+        if self.skyMap is not None:
+            coord_txt += f" ({self.getName(coord)})"
+        self.radec.set(coord_txt)
 
     def connect(self, device):
         self.device = device
@@ -46,12 +60,8 @@ class MountStatusWidget(BaseWidget):
         self.radec.set("")
         self.statusIcon.set(STOP)
 
-    def getName(coord: SkyCoord):
-        result = ""
-        result += coord.to_string("hmsdms")
-
-        resp = requests.get('http://simbad.u-strasbg.fr/simbad/sim-coo', params={'output.format': 'ASCII', 'Coord': coord.to_string('hmsdms'), 'Radius': '0.1'})
-        if resp.status_code == 200:
-            
-
+    def getName(self, coord: SkyCoord):
+        if self.skyMap is None:
+            return ""
+        result = self.skyMap.findObjects(coord, limit=1)
         return result
