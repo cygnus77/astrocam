@@ -48,7 +48,7 @@ class MountStatusWidget(BaseWidget):
         if self.skyMap is not None:
             coord_txt += f" ({self.getName(coord)})"
         self.radec.set(coord_txt)
-        return
+        return True
 
     def _connect(self, device):
         self.device = device

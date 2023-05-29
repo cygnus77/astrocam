@@ -7,9 +7,14 @@ class FocuserWidget(BaseWidget):
   def __init__(self, parentFrame, device):
     super().__init__(parentFrame, "Focuser")
 
+    self.focuserPos = tk.IntVar()
     self.focuserGotoTgt = tk.IntVar()
 
     self.focuser = device
+    posFrame = ttk.Frame(self.widgetFrame)
+    ttk.Label(posFrame,text="Focuser @").pack(side=tk.LEFT)
+    ttk.Label(posFrame,textvariable=self.focuserPos).pack(side=tk.LEFT)
+    posFrame.pack(side=tk.LEFT)
     gotoFrame = ttk.Frame(self.widgetFrame)
     ttk.Entry(gotoFrame,textvariable=self.focuserGotoTgt, font=BaseWidget.EntryFont, width=BaseWidget.EntryWidth).pack(side=tk.RIGHT)
     ttk.Button(gotoFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.RIGHT)
@@ -44,6 +49,6 @@ class FocuserWidget(BaseWidget):
 
   def _update(self):
     if self.focuser is not None and self.focuser.connected:
-      self.setHeader(str(self.focuser.position))
+      self.focuserPos.set(self.focuser.position)
       return True
     return False

@@ -18,10 +18,10 @@ class CoolerWidget(BaseWidget):
     ttk.Label(tempFrame, textvariable=self.cameraTemp).pack(side=tk.LEFT, padx=5, pady=5)
     ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
     tempFrame.pack(fill=tk.X, side=tk.TOP)
-    # # Cooler & power status
-    # coolerFrame = ttk.Frame(self.widgetFrame)
-    # ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
-    # coolerFrame.pack(fill=tk.X, side=tk.TOP)
+    # Cooler & power status
+    coolerFrame = ttk.Frame(self.widgetFrame)
+    ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
+    coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
     self.thread = None
 
@@ -55,8 +55,7 @@ class CoolerWidget(BaseWidget):
           self.thread = None
 
       self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C {threadStatus}")      
-      self.setHeader(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
-
+      self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
       return True
     return False
 

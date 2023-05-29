@@ -20,28 +20,36 @@ class BaseWidget:
     
     frame_label = ttk.Label(self.widgetFrame, textvariable=self.headervar)
     frame_label.pack()
-    self.setHeader()
-
-  def setHeader(self, text=""):
-    self.headervar.set(f"{self.widgetName} ({self.status}) {text}")
+    self.updateHeader()
+    
+  def updateHeader(self):
+    self.headervar.set(f"{self.widgetName}: {self.status}")
 
   def update(self):
     try:
       if self._update():
-        self.headervar.set(f"{self.widgetName}: {self.GREEN_CHECK}")
+        self.status = self.GREEN_CHECK
       else:
-        self.headervar.set(f"{self.widgetName}: {self.UNPLUGGED}")
+        self.status = self.UNPLUGGED
     except Exception as ex:
-      self.headervar.set(f"{self.widgetName}: {self.EXCLAMATION}")
+      print(f"Failed to update {self.widgetName}: {ex}")
+      self.status = self.EXCLAMATION
+    self.updateHeader()
 
   def connect(self, device):
     try:
       self._connect(device)
+      self.status = self.GREEN_CHECK
     except Exception as ex:
       print(f"Failed to connect to {self.widgetName}: {ex}")
+      self.status = self.EXCLAMATION
+    self.updateHeader()
 
   def disconnect(self):
     try:
       self._disconnect()
+      self.status = self.UNPLUGGED
     except Exception as ex:
       print(f"Failed to disconnect from {self.widgetName}: {ex}")
+      self.status = self.EXCLAMATION
+    self.updateHeader()

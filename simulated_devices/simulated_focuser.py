@@ -4,7 +4,7 @@ class SimulatedFocuser():
   def __init__(self):
     super().__init__()
     self._connected = True
-    self._position = 0
+    self._position = 10000
 
   def close(self):
       self._connected = False
