@@ -1,7 +1,9 @@
+import math
 from pymongo import MongoClient
 from astropy.coordinates import SkyCoord
-import math
+from astropy import units as u
 from astropy.coordinates import ICRS
+
 
 class SkyMap:
   def __init__(self) -> None:
@@ -77,6 +79,11 @@ def _test():
 
 
 if __name__ == "__main__":
+  # M101 RA: 14h04m00.0s
+  c1 = SkyCoord(14.066564 * u.hour, 54.218594 * u.degree, frame=ICRS)
+  with SkyMap() as sm:
+    print(sm.findObjects(c1, fov_deg=1))
+
   _test()
 
   c1 = SkyCoord("14h15m39.67207s +19d10m56.6730s", frame=ICRS)

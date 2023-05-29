@@ -27,21 +27,29 @@ class FocuserWidget(BaseWidget):
     self.focuser = None
 
   def focuserGoto(self):
-    if self.focuser is not None and self.focuser.connected:
-      self.focuser.goto(self.focuserGotoTgt.get())
+    try:
+      if self.focuser is not None and self.focuser.connected:
+        self.focuser.goto(self.focuserGotoTgt.get())
+    except Exception as e:
+      print("Error moving focuser: {e}")
 
   def onkeypress(self, event):
-    if self.focuser is not None and self.focuser.connected:
-      if event.char == 'i':
-        self.focuser.movein(1)
-      elif event.char == 'I':
-        self.focuser.movein(5)
-      elif event.char == 'o':
-        self.focuser.moveout(1)
-      elif event.char == 'O':
-        self.focuser.moveout(5)
+    try:
+      if self.focuser is not None and self.focuser.connected:
+        if event.char == 'i':
+          self.focuser.movein(1)
+        elif event.char == 'I':
+          self.focuser.movein(5)
+        elif event.char == 'o':
+          self.focuser.moveout(1)
+        elif event.char == 'O':
+          self.focuser.moveout(5)
+    except Exception as e:
+      print("Error moving focuser: {e}")
 
   def update(self):
-    if self.focuser is not None and self.focuser.connected:
-      self.focuserPos.set(self.focuser.position)
-
+    try:
+      if self.focuser is not None and self.focuser.connected:
+        self.focuserPos.set(self.focuser.position)
+    except Exception as e:
+      print("Error updating focuser widget: {e}")

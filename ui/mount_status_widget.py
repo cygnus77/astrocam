@@ -9,6 +9,7 @@ import requests
 GREEN_CHECK = u'\u2713'
 EXCLAMATION = u'\u2757'
 STOP = u'\u25CF'
+UNPLUGGED = u'\u1f50c'
 
 class MountStatusWidget(BaseWidget):
     def __init__(self, parentFrame, device) -> None:
@@ -36,20 +37,24 @@ class MountStatusWidget(BaseWidget):
             self.skyMap = None
 
     def update(self):
-        if self.device is None:
-            return
-        if self.device.tracking:
-            self.statusIcon.set(GREEN_CHECK)
-        elif self.device.atpark:
-            self.statusIcon.set(STOP)
-        elif self.device.slewing:
-            self.statusIcon.set(EXCLAMATION)
+        try:
+            if self.device is None:
+                return
+            if self.device.tracking:
+                self.statusIcon.set(GREEN_CHECK)
+            elif self.device.atpark:
+                self.statusIcon.set(STOP)
+            elif self.device.slewing:
+                self.statusIcon.set(EXCLAMATION)
 
-        coord = self.device.coordinates
-        coord_txt = coord.to_string("hmsdms")
-        if self.skyMap is not None:
-            coord_txt += f" ({self.getName(coord)})"
-        self.radec.set(coord_txt)
+            coord = self.device.coordinates
+            coord_txt = coord.to_string("hmsdms")
+            if self.skyMap is not None:
+                coord_txt += f" ({self.getName(coord)})"
+            self.radec.set(coord_txt)
+        except Exception as ex:
+            self.statusIcon.set(UNPLUGGED)
+            print(f"Failed to update mount status: {ex}")
 
     def connect(self, device):
         self.device = device
@@ -61,7 +66,11 @@ class MountStatusWidget(BaseWidget):
         self.statusIcon.set(STOP)
 
     def getName(self, coord: SkyCoord):
-        if self.skyMap is None:
+        try:
+            if self.skyMap is None:
+                return ""
+            result = self.skyMap.findObjects(coord, limit=1)
+            return result
+        except Exception as ex:
+            print(f"Failed to get name from SkyMap: {ex}")
             return ""
-        result = self.skyMap.findObjects(coord, limit=1)
-        return result

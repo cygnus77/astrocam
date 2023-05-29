@@ -20,7 +20,7 @@ class Mount(AscomDevice):
     def coordinates(self) -> SkyCoord:
         ra = self._get("rightascension")
         dec = self._get("declination")
-        return SkyCoord(ra * u.degree, dec * u.degree, frame=ICRS)
+        return SkyCoord(ra * u.hour, dec * u.degree, frame=ICRS)
 
     @property
     def site_lat(self):

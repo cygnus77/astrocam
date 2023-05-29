@@ -23,6 +23,8 @@ class CoolerWidget(BaseWidget):
     ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
     coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
+    self.thread = None
+
   def connect(self, camera):
     self.camera = camera
 
@@ -30,14 +32,39 @@ class CoolerWidget(BaseWidget):
     self.camera = None
 
   def coolCamera(self):
-    thread = Thread(target=self.camera.coolto, args=[0])
-    thread.start()
+    self.thread = Thread(target=self.camera.coolto, args=[0], name="Cool")
+    self.thread.start()
 
   def warmCamera(self):
-    thread = Thread(target=self.camera.warmto, args=[25])
-    thread.start()
+    self.thread = Thread(target=self.camera.warmto, args=[25], name="Warm")
+    self.thread.start()
 
   def update(self):
-    if self.camera is not None and self.camera.connected:
-      self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C")
-      self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
+    try:
+      if self.camera is not None and self.camera.connected:
+
+        threadStatus = ""      
+        if self.thread is not None:
+          if self.thread.is_alive():
+            if self.thread.getName() == "Cool":
+              # unicode char for arrow down
+              threadStatus += u'\u2193'
+            elif self.thread.getName() == "Warm":
+              # unicode char for arrow up
+              threadStatus += u'\u2191'
+          else:
+            self.thread = None
+
+        self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C {threadStatus}")      
+        self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
+
+      else:
+        # unicode char for not connected
+        self.cameraTemp.set(u'')
+        self.cameraCooler.set("Cooler: \u1f50c")
+
+    except Exception as ex:
+      print(f"Failed to update camera status: {ex}")
+      # unicode char for failure
+      self.cameraTemp.set('')
+      self.cameraCooler.set("Cooler: \u26A0")
