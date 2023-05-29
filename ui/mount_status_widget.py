@@ -5,18 +5,15 @@ import psutil
 from ui.base_widget import BaseWidget
 from astropy.coordinates import SkyCoord
 import requests
+from settings import config
 
-GREEN_CHECK = u'\u2713'
-EXCLAMATION = u'\u2757'
-STOP = u'\u25CF'
-UNPLUGGED = u'\u1f50c'
 
 class MountStatusWidget(BaseWidget):
     def __init__(self, parentFrame, device) -> None:
-        super().__init__()
+        super().__init__(parentFrame, "Mount")
         self._connectSkyMap()
         self.device = device
-        statusFrame = ttk.Frame(parentFrame)
+        statusFrame = ttk.Frame(self.widgetFrame)
         # Textbox to show coordinates
         self.radec = tk.StringVar()
         ttk.Label(statusFrame, textvariable=self.radec).pack(side=tk.LEFT)
@@ -30,40 +27,37 @@ class MountStatusWidget(BaseWidget):
     def _connectSkyMap(self):
         try:
             if "mongod.exe" not in [p.name() for p in psutil.process_iter()]:
-                psutil.Popen([r"mongod.exe", "--dbpath", r"D:\skymapdata"], shell=True, cwd=r"C:\code\astrocam\skymap\stardb")
+                psutil.Popen([r"mongod.exe", "--dbpath", config['stardb']], shell=True, cwd=config['mongodir'])
             self.skyMap = SkyMap()
         except Exception as ex:
             print(f"Failed to connect to SkyMap: {ex}")
             self.skyMap = None
 
-    def update(self):
-        try:
-            if self.device is None:
-                return
-            if self.device.tracking:
-                self.statusIcon.set(GREEN_CHECK)
-            elif self.device.atpark:
-                self.statusIcon.set(STOP)
-            elif self.device.slewing:
-                self.statusIcon.set(EXCLAMATION)
+    def _update(self):
+        if self.device is None:
+            return False
+        if self.device.tracking:
+            self.statusIcon.set(BaseWidget.GREEN_CHECK)
+        elif self.device.atpark:
+            self.statusIcon.set(BaseWidget.STOP)
+        elif self.device.slewing:
+            self.statusIcon.set(BaseWidget.EXCLAMATION)
 
-            coord = self.device.coordinates
-            coord_txt = coord.to_string("hmsdms")
-            if self.skyMap is not None:
-                coord_txt += f" ({self.getName(coord)})"
-            self.radec.set(coord_txt)
-        except Exception as ex:
-            self.statusIcon.set(UNPLUGGED)
-            print(f"Failed to update mount status: {ex}")
+        coord = self.device.coordinates
+        coord_txt = coord.to_string("hmsdms")
+        if self.skyMap is not None:
+            coord_txt += f" ({self.getName(coord)})"
+        self.radec.set(coord_txt)
+        return
 
-    def connect(self, device):
+    def _connect(self, device):
         self.device = device
         self.update()
 
-    def disconnect(self):
+    def _disconnect(self):
         self.device = None
         self.radec.set("")
-        self.statusIcon.set(STOP)
+        self.statusIcon.set(BaseWidget.STOP)
 
     def getName(self, coord: SkyCoord):
         try:

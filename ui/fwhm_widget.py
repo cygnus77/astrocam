@@ -11,20 +11,25 @@ import cv2
 class FWHMWidget(BaseWidget):
 
   def __init__(self, parentFrame, imageViewer):
-    super().__init__()
+    super().__init__(parentFrame, "FWHM")
     self.imageViewer = imageViewer
     self.starFinder = StarFinder()
     self.starMatcher = StarMatcher()
 
     self.stats = tk.StringVar()
-    ttk.Label(parentFrame, textvariable=self.stats).pack(fill=tk.X, side=tk.TOP)
+    ttk.Label(self.widgetFrame, textvariable=self.stats).pack(fill=tk.X, side=tk.TOP)
 
     self.frame_idx = 0
     self.df_ref = None
     self.df_fwhm = None
 
-  def update(self, img16: np.ndarray):
-    try:
+  def _connect(self, camera):
+    return
+
+  def _disconnect(self):
+    return
+
+  def _update(self, img16: np.ndarray):
       assert(img16.dtype == np.uint16)
       assert(len(img16.shape) == 3)
       assert(img16.shape[2] == 3)
@@ -54,5 +59,4 @@ class FWHMWidget(BaseWidget):
       self.df_fwhm.to_csv(f"fwhm_data/fwhm_{timestamp}.csv")
 
       self.frame_idx += 1
-    except Exception as e:
-      print(e)
+      return True
