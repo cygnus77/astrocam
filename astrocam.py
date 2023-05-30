@@ -172,7 +172,7 @@ class AstroCam:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Create a canvas to hold the content of controlPanelFrame
-        canvas = tk.Canvas(controlPanelFrame, yscrollcommand=scrollbar.set)
+        canvas = tk.Canvas(controlPanelFrame, yscrollcommand=scrollbar.set, background="#200")
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Configure the scrollbar to scroll the canvas

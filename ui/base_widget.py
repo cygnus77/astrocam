@@ -15,20 +15,19 @@ class BaseWidget:
     self.status = self.UNPLUGGED
 
     # Create widget super frame
-    self.wrapperFrame = ttk.Frame(parentFrame)
-
-    self.wrapperFrame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    self.hdrFrame = ttk.Frame(parentFrame)
+    self.hdrFrame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
     self.hdrInfo = tk.StringVar()
-    frame_label = ttk.Label(self.wrapperFrame, textvariable=self.hdrInfo)
+    frame_label = ttk.Label(self.hdrFrame, textvariable=self.hdrInfo)
     frame_label.pack(side=tk.RIGHT, expand=True)
 
     self.hdrConnStat = tk.StringVar()
-    frame_label = ttk.Label(self.wrapperFrame, textvariable=self.hdrConnStat)
+    frame_label = ttk.Label(self.hdrFrame, textvariable=self.hdrConnStat)
     frame_label.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
     # Create the collapse/expand label
-    self.collapse_icon = ttk.Label(self.wrapperFrame, text=u'\u25B6', font=('Arial', 10, 'bold'))
+    self.collapse_icon = ttk.Label(self.hdrFrame, text=u'\u25B6', font=('Arial', 10, 'bold'))
     self.collapse_icon.pack(side=tk.LEFT, fill=tk.X, expand=False)
     self.collapse_icon.bind('<Button-1>', lambda e: self.toggle_frame())
     self.updateHeader()
