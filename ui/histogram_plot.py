@@ -15,6 +15,10 @@ class HistogramViewer(BaseWidget):
     self.histImg = None
 
   def setImage(self, img: np.ndarray):
+    imgCanvasWidth, imgCanvasHeight = self.histoCanvas.winfo_width(), self.histoCanvas.winfo_height()
+    if imgCanvasWidth < 50:
+      return
+
     start_time = time.time_ns()
     red = np.bincount(img[:,:,0].reshape(-1), minlength=256)
     green = np.bincount(img[:,:,1].reshape(-1), minlength=256)
@@ -35,7 +39,6 @@ class HistogramViewer(BaseWidget):
     b_layer = make_layer(blue)
     histImg = np.stack([r_layer, g_layer, b_layer],axis=2)
 
-    imgCanvasWidth, imgCanvasHeight = self.histoCanvas.winfo_width(), self.histoCanvas.winfo_height()
     imgAspect = img.shape[0] / img.shape[1]
 
     if imgCanvasWidth * imgAspect <= imgCanvasHeight:

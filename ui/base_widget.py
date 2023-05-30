@@ -39,9 +39,9 @@ class BaseWidget:
   def updateHeader(self):
     self.hdrConnStat.set(f"{self.widgetName}: {self.status}")
 
-  def update(self):
+  def update(self, *args, **kwargs):
     try:
-      if self._update():
+      if self._update(*args, **kwargs):
         self.status = self.GREEN_CHECK
       else:
         self.status = self.UNPLUGGED
