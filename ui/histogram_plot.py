@@ -4,11 +4,13 @@ from PIL import ImageTk, Image
 import numpy as np
 import time
 import cv2
+from ui.base_widget import BaseWidget
 
-class HistogramViewer:
+class HistogramViewer(BaseWidget):
 
   def __init__(self, parentFrame):
-    self.histoCanvas=tk.Canvas(parentFrame, bg='black')
+    super().__init__(parentFrame, "Histogram")
+    self.histoCanvas=tk.Canvas(self.widgetFrame, bg='black')
     self.histoCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
     self.histImg = None
 
@@ -50,7 +52,7 @@ class HistogramViewer:
     print(f"histo_time: {histo_time/1e9:0.3f}")
     
 
-  def update(self):
+  def _update(self):
     if self.histImg is not None:
       self.histImgObject = ImageTk.PhotoImage(image=Image.fromarray(self.histImg))
       self.histoCanvas.create_image(0, 0, image = self.histImgObject, anchor = tk.NW)

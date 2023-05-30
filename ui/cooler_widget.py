@@ -11,7 +11,7 @@ class CoolerWidget(BaseWidget):
     self.camera = device
 
     self.cameraTemp = tk.StringVar()
-    self.cameraCooler = tk.StringVar()
+    # self.cameraCooler = tk.StringVar()
 
     tempFrame = ttk.Frame(self.widgetFrame)
     ttk.Button(tempFrame, text="Cool", command=self.coolCamera).pack(side=tk.LEFT, padx=5, pady=5)
@@ -19,9 +19,9 @@ class CoolerWidget(BaseWidget):
     ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
     tempFrame.pack(fill=tk.X, side=tk.TOP)
     # Cooler & power status
-    coolerFrame = ttk.Frame(self.widgetFrame)
-    ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
-    coolerFrame.pack(fill=tk.X, side=tk.TOP)
+    # coolerFrame = ttk.Frame(self.widgetFrame)
+    # ttk.Label(coolerFrame, textvariable=self.cameraCooler).pack(side=tk.LEFT, padx=5, pady=5)
+    # coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
     self.thread = None
 
@@ -54,8 +54,11 @@ class CoolerWidget(BaseWidget):
         else:
           self.thread = None
 
-      self.cameraTemp.set(f"Temp: {self.camera.temperature:.1f} C {threadStatus}")      
-      self.cameraCooler.set(f"Cooler: {'On' if self.camera.cooler == True else 'Off'} power: {self.camera.coolerpower}")
+      stat = 'On' if self.camera.cooler == True else 'Off'
+      temperature = self.camera.temperature
+      coolerpower = self.camera.coolerpower
+      self.cameraTemp.set(f"({stat} {coolerpower}%) {threadStatus}")
+      self.hdrInfo.set(f"{stat} {temperature:.1f} C")
       return True
     return False
 

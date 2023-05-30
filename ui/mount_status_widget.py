@@ -18,8 +18,8 @@ class MountStatusWidget(BaseWidget):
         self.radec = tk.StringVar()
         ttk.Label(statusFrame, textvariable=self.radec).pack(side=tk.LEFT)
         # Status label indicating status: tracking, park or slewing
-        self.statusIcon = tk.StringVar()
-        ttk.Label(statusFrame, textvariable=self.statusIcon).pack(side=tk.LEFT)
+        # self.statusIcon = tk.StringVar()
+        # ttk.Label(statusFrame, textvariable=self.statusIcon).pack(side=tk.LEFT)
         statusFrame.pack(side=tk.LEFT)
 
         self.update()
@@ -37,11 +37,11 @@ class MountStatusWidget(BaseWidget):
         if self.device is None:
             return False
         if self.device.tracking:
-            self.statusIcon.set(BaseWidget.GREEN_CHECK)
+            self.hdrInfo.set("Tracking")
         elif self.device.atpark:
-            self.statusIcon.set(BaseWidget.STOP)
+            self.hdrInfo.set("Parked")
         elif self.device.slewing:
-            self.statusIcon.set(BaseWidget.EXCLAMATION)
+            self.hdrInfo.set("Slewing")
 
         coord = self.device.coordinates
         coord_txt = coord.to_string("hmsdms")
@@ -57,7 +57,6 @@ class MountStatusWidget(BaseWidget):
     def _disconnect(self):
         self.device = None
         self.radec.set("")
-        self.statusIcon.set(BaseWidget.STOP)
 
     def getName(self, coord: SkyCoord):
         try:

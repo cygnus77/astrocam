@@ -103,7 +103,6 @@ class AstroCam:
         self.root.style.map("Horizontal.TScrollbar",
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
 
-
         # Layout
         parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
 
@@ -113,29 +112,27 @@ class AstroCam:
         imageViewerFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
 
         # Control panel on right
-        controlPanelFrame = ttk.Frame(parentFrame)
+        scrollableControlPanelFrame = self.createScollableControlPanel(parentFrame)
 
         # Histogram
-        histoFrame=tk.Frame(controlPanelFrame, bg='black')
+        histoFrame=tk.Frame(scrollableControlPanelFrame, bg='black')
         self.histoViewer = HistogramViewer(histoFrame)
         histoFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
-        
 
         # On / Off Button
         self.on_icon = tk.PhotoImage(file='icons/on.png')
         self.off_icon = tk.PhotoImage(file='icons/off.png')
-        self.connectBtn = ttk.Button(controlPanelFrame, image=self.on_icon, command=self.toggleconnect)
+        self.connectBtn = ttk.Button(scrollableControlPanelFrame, image=self.on_icon, command=self.toggleconnect)
         self.connectBtn.place(rely=0.0, relx=1.0, x=0, y=0, anchor=tk.NE)
 
-
-        self.exposureProgress = ttk.Progressbar(controlPanelFrame, orient='horizontal', mode='determinate', length=100)
+        self.exposureProgress = ttk.Progressbar(scrollableControlPanelFrame, orient='horizontal', mode='determinate', length=100)
         self.exposureProgress.pack(fill=tk.X, side=tk.TOP, pady=0)
 
         # Status message
-        ttk.Label(controlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
+        ttk.Label(scrollableControlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
 
         # Focuser and thermal controls
-        rightControlFrame = ttk.Frame(controlPanelFrame, padding=5, relief='raised')
+        rightControlFrame = ttk.Frame(scrollableControlPanelFrame, padding=5, relief='raised')
         # Setup cooler controls
         coolerFrame = ttk.Frame(rightControlFrame)
         self.coolerWidget = CoolerWidget(coolerFrame, self.camera)
@@ -160,13 +157,35 @@ class AstroCam:
         rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
         # Imaging controls
-        leftControlFrame=ttk.Frame(controlPanelFrame, padding=5, relief='raised')
+        leftControlFrame=ttk.Frame(scrollableControlPanelFrame, padding=5, relief='raised')
         self.setupControlBoard(leftControlFrame)
         leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
-        controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
+        # Add the content_frame to the canvas
         parentFrame.pack(fill=tk.BOTH, expand=True)
 
+    def createScollableControlPanel(self, parentFrame):
+        controlPanelFrame = ttk.Frame(parentFrame)
+
+        # Create a vertical scrollbar
+        scrollbar = ttk.Scrollbar(controlPanelFrame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Create a canvas to hold the content of controlPanelFrame
+        canvas = tk.Canvas(controlPanelFrame, yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Configure the scrollbar to scroll the canvas
+        scrollbar.config(command=canvas.yview)
+
+        # Create a frame inside the canvas for the content of controlPanelFrame
+        scrollableControlPanelFrame = ttk.Frame(canvas)
+
+        canvas.create_window((0, 0), window=scrollableControlPanelFrame, anchor=tk.NW)
+        scrollableControlPanelFrame.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+        controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
+
+        return scrollableControlPanelFrame
 
     def setupControlBoard(self, frame):
         settingsFrame = ttk.Frame(frame)
