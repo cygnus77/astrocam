@@ -27,6 +27,9 @@ class SimulatedCamera():
         self._connected = False
         return
     
+    def isSimulator(self):
+        return True
+
     @property
     def connected(self) -> bool:
         return self._connected

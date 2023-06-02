@@ -57,6 +57,9 @@ class ASINativeCamera():
     self._connected = False
     self.camera.close()
 
+  def isSimulator(self):
+    return False
+
   """ Camera Info """
   @property
   def connected(self) -> bool:

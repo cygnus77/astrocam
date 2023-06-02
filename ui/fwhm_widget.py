@@ -30,6 +30,8 @@ class FWHMWidget(BaseWidget):
     self.ax.set_facecolor("#200")
     self.ax.tick_params(axis='x', colors='white')
     self.ax.tick_params(axis='y', colors='white')
+    self.ax2 = self.ax.twinx()
+    self.ax2.tick_params(axis='y', colors='white')
     
     self.canvas = FigureCanvasTkAgg(fig, master=tk_canvas)
     self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
@@ -58,9 +60,11 @@ class FWHMWidget(BaseWidget):
       img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
       numStars = 20
       star_img, df = self.starFinder.find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
-      fwhm = {"fwhm_x": df.fwhm_x.mean(),
-              "fwhm_y":df.fwhm_y.mean(),
-              "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
+      fwhm = {
+        "numstars": len(df),
+        "fwhm_x": df.fwhm_x.mean(),
+        "fwhm_y":df.fwhm_y.mean(),
+        "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
 
       self.fwhm_data.append(fwhm)
 
@@ -71,14 +75,16 @@ class FWHMWidget(BaseWidget):
   def render_fwhm_plot(self):
     self.ax.clear()
     if len(self.fwhm_data) == 0:
+      self.canvas.draw()
       return
-    self.ax.plot([x['fwhm_x'] for x in self.fwhm_data], label="x")
-    self.ax.plot([x['fwhm_y'] for x in self.fwhm_data], label="y")
-
+    # self.ax.plot([x['fwhm_x'] for x in self.fwhm_data], label="x")
+    # self.ax.plot([x['fwhm_y'] for x in self.fwhm_data], label="y")
     y = np.array([x['fwhm_ave'] for x in self.fwhm_data])
     x = np.arange(len(self.fwhm_data))
     self.ax.plot(y, label="ave")
-    
+
+    self.ax2.plot([x['numstars'] for x in self.fwhm_data], 'g--', label="n")
+
     z = np.polyfit(x, y, 1)
     p = np.poly1d(z)
     self.ax.plot(x, p(x))

@@ -5,58 +5,48 @@ import numpy as np
 import time
 import cv2
 from ui.base_widget import BaseWidget
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.ticker as ticker
+
 
 class HistogramViewer(BaseWidget):
 
   def __init__(self, parentFrame):
     super().__init__(parentFrame, "Histogram")
-    self.histoCanvas=tk.Canvas(self.widgetFrame, bg='black')
+    self.histoCanvas=tk.Canvas(self.widgetFrame, width=300, height=250, background="#200")
     self.histoCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
     self.histImg = None
 
-  def setImage(self, img: np.ndarray):
-    imgCanvasWidth, imgCanvasHeight = self.histoCanvas.winfo_width(), self.histoCanvas.winfo_height()
-    if imgCanvasWidth < 50:
+    fig = Figure(figsize=(3.0, 2.5), dpi=100)
+    fig.set_facecolor("#200")
+    self.ax = fig.add_subplot(111)
+    self.ax.set_facecolor("#200")
+    self.ax.tick_params(axis='x', colors='white')
+    self.ax.tick_params(axis='y', colors='white')
+
+    self.canvas = FigureCanvasTkAgg(fig, master=self.histoCanvas)
+    self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+  def _update(self, img: np.ndarray):
+    if img is None:
       return
+    red = np.bincount(img[:,:,0].reshape(-1))
+    green = np.bincount(img[:,:,1].reshape(-1))
+    blue = np.bincount(img[:,:,2].reshape(-1))
 
-    start_time = time.time_ns()
-    red = np.bincount(img[:,:,0].reshape(-1), minlength=256)
-    green = np.bincount(img[:,:,1].reshape(-1), minlength=256)
-    blue = np.bincount(img[:,:,2].reshape(-1), minlength=256)
+    x = np.linspace(0, 65535, 5)
+    self.ax.set_xticks(x)
+    self.ax.set_xticklabels(['{:.1f}k'.format(tick/1e3) for tick in x])
 
-    def make_layer(a):
-      ht = 256
-      wd = 256
-      a = a * ht / a.max()
-      a = a.astype(np.uint32)
-      layer = np.zeros((ht, wd), dtype=np.uint8)
-      for i in range(wd):
-        layer[ht-a[i]:ht, i] = 255
-      return layer
+    m = np.max([np.max(red), np.max(blue), np.max(green)])
+    m = 1e3 * int((m + 1e3)/1e3)
+    y = np.linspace(0, m, 5)
+    self.ax.set_yticks(y)
+    self.ax.set_yticklabels(['{:.1f}k'.format(tick/1e3) for tick in y])
 
-    r_layer = make_layer(red)
-    g_layer = make_layer(green)
-    b_layer = make_layer(blue)
-    histImg = np.stack([r_layer, g_layer, b_layer],axis=2)
+    self.ax.plot(red, 'r')
+    self.ax.plot(green, 'g')
+    self.ax.plot(blue, 'b')
 
-    imgAspect = img.shape[0] / img.shape[1]
-
-    if imgCanvasWidth * imgAspect <= imgCanvasHeight:
-        w = imgCanvasWidth
-        h = int(imgCanvasWidth * imgAspect)
-    else:
-        h = imgCanvasHeight
-        w = int(imgCanvasHeight / imgAspect)
-
-    self.histImg = cv2.resize(histImg, dsize=(int(w), int(h)), interpolation=cv2.INTER_LINEAR)
-    self.update()
-
-    histo_time = time.time_ns() - start_time
-    print(f"histo_time: {histo_time/1e9:0.3f}")
-    
-
-  def _update(self):
-    if self.histImg is not None:
-      self.histImgObject = ImageTk.PhotoImage(image=Image.fromarray(self.histImg))
-      self.histoCanvas.create_image(0, 0, image = self.histImgObject, anchor = tk.NW)
-
+    self.canvas.draw()

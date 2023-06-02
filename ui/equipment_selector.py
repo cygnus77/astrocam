@@ -4,6 +4,8 @@ from tkinter import messagebox, filedialog
 import serial.tools.list_ports
 import psutil
 import time
+from pathlib import Path
+import json
 
 class COMPortSelectionDialog(tk.Toplevel):
 
@@ -143,6 +145,13 @@ def selectEquipment(parent=None):
     CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
     FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
 
+    if Path("equipment.json").exists():
+      with open("equipment.json", "r") as f:
+        equipment = json.load(f)
+        selected_mount_index = MOUNT_CHOICES.index(equipment["mount"])
+        selected_camera_index = CAMERA_CHOICES.index(equipment["camera"])
+        selected_focuser_index = FOCUSER_CHOICES.index(equipment["focuser"])
+
     equipment_selection = EquipmentSelector(parent, MOUNT_CHOICES, CAMERA_CHOICES, FOCUSER_CHOICES, selected_mount_index, selected_camera_index, selected_focuser_index)
     equipment_selection.wait_window()
     selected_mount_index = MOUNT_CHOICES.index(equipment_selection.mount)
@@ -151,6 +160,9 @@ def selectEquipment(parent=None):
     print("Mount:", selected_mount_index)
     print("Camera:", selected_camera_index)
     print("Focuser:", selected_focuser_index)
+
+    with open("equipment.json", "w") as f:
+      json.dump({"mount": equipment_selection.mount, "camera": equipment_selection.camera, "focuser": equipment_selection.focuser}, f)
 
     # Instantiate selected mount
     if equipment_selection.mount == "Gemini-Ascom":

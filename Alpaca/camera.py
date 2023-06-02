@@ -28,6 +28,9 @@ class Camera(AscomDevice):
     self._pixelSize = [self._get("pixelsizex"), self._get("pixelsizey")]
     self._sensortype = self._get("sensortype")
 
+  def isSimulator(self):
+    return False
+
   class CameraState(IntEnum):
     IDLE = 0
     WAITING = 1

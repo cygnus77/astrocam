@@ -41,6 +41,7 @@ class AstroCam:
         self.destDir = destDir
         self.runningExposures = 0
         self.runningLiveView = False
+        self.runningSimulator = False
         self.cancelJob = False
         self.image_queue = Queue(1000)  
         self.req_queue = Queue(1000)
@@ -379,7 +380,7 @@ class AstroCam:
                 'BAYERPAT': self.camera.sensor_type.name
             })
 
-            if not self.runningLiveView:
+            if not self.runningLiveView and not self.runningSimulator:
                 sno_file = Path('serial_no.txt')
                 if sno_file.exists():
                     serial_no = int(sno_file.read_text())
@@ -403,7 +404,7 @@ class AstroCam:
 
             imageData = ImageData(img, output_fname, hdr)
             img = self.imageViewer.setImage(imageData)
-            self.histoViewer.setImage(img)
+            self.histoViewer.update(img)
             imageData.close()
 
         # Start next exposure
@@ -539,6 +540,7 @@ class AstroCam:
         else:
             try:
                 self.mount, self.camera, self.focuser = selectEquipment(self.root)
+                self.runningSimulator = self.camera.isSimulator()
                 self.mountStatusWidget.connect(self.mount)
                 self.focuserWidget.connect(self.focuser)
                 self.coolerWidget.connect(self.camera)
