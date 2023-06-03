@@ -15,8 +15,7 @@ class HistogramViewer(BaseWidget):
   def __init__(self, parentFrame):
     super().__init__(parentFrame, "Histogram")
     self.histoCanvas=tk.Canvas(self.widgetFrame, width=300, height=250, background="#200")
-    self.histoCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
-    self.histImg = None
+    self.histoCanvas.pack(side=tk.LEFT)
 
     fig = Figure(figsize=(3.0, 2.5), dpi=100)
     fig.set_facecolor("#200")

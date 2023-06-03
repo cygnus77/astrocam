@@ -105,7 +105,7 @@ class AstroCam:
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
 
         # Layout
-        parentFrame=ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
+        parentFrame=ttk.Frame(self.root, relief=tk.RAISED)
 
         # Image container
         imageViewerFrame = ttk.Frame(parentFrame)
@@ -133,34 +133,34 @@ class AstroCam:
         ttk.Label(scrollableControlPanelFrame, textvariable=self.runStatus).pack(fill=tk.X, side=tk.TOP, pady=5)
 
         # Focuser and thermal controls
-        rightControlFrame = ttk.Frame(scrollableControlPanelFrame, padding=5, relief='raised')
+        widgetsFrame = ttk.Frame(scrollableControlPanelFrame, relief='raised')
         # Setup cooler controls
-        coolerFrame = ttk.Frame(rightControlFrame)
+        coolerFrame = ttk.Frame(widgetsFrame)
         self.coolerWidget = CoolerWidget(coolerFrame, self.camera)
         coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Focuser controls
-        focusFrame = ttk.Frame(rightControlFrame)
+        focusFrame = ttk.Frame(widgetsFrame)
         self.focuserWidget = FocuserWidget(focusFrame, self.focuser)
         self.root.bind("<Key>", self.focuserWidget.onkeypress)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Setup mount status
-        mountStatusFrame = ttk.Frame(rightControlFrame)
+        mountStatusFrame = ttk.Frame(widgetsFrame)
         self.mountStatusWidget = MountStatusWidget(mountStatusFrame, self.mount)
         mountStatusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Star stats
-        starStatFrame = ttk.Frame(rightControlFrame)
-        self.fwhmWidget = FWHMWidget(rightControlFrame, self.imageViewer)
+        starStatFrame = ttk.Frame(widgetsFrame)
+        self.fwhmWidget = FWHMWidget(widgetsFrame, self.imageViewer)
         starStatFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
-        rightControlFrame.pack(fill=tk.BOTH, side=tk.TOP)
+        widgetsFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
         # Imaging controls
-        leftControlFrame=ttk.Frame(scrollableControlPanelFrame, padding=5, relief='raised')
-        self.setupControlBoard(leftControlFrame)
-        leftControlFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
+        imagingControlsFrame=ttk.Frame(scrollableControlPanelFrame, relief='raised')
+        self.setupControlBoard(imagingControlsFrame)
+        imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
         # Add the content_frame to the canvas
         parentFrame.pack(fill=tk.BOTH, expand=True)
