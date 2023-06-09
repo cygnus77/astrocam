@@ -11,9 +11,9 @@ class FocuserWidget(BaseWidget):
 
     self.focuser = device
     gotoFrame = ttk.Frame(self.widgetFrame)
-    ttk.Entry(gotoFrame,textvariable=self.focuserGotoTgt, font=BaseWidget.EntryFont, width=BaseWidget.EntryWidth).pack(side=tk.LEFT, fill=tk.X, expand=True)
+    ttk.Entry(gotoFrame,textvariable=self.focuserGotoTgt, font=BaseWidget.EntryFont, width=BaseWidget.EntryWidth).pack(side=tk.LEFT, fill=tk.X)
     ttk.Button(gotoFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.RIGHT)
-    gotoFrame.pack(fill=tk.X, expand=True)
+    gotoFrame.pack(fill=tk.X)
 
   def _connect(self, focuser):
     self.focuser = focuser

@@ -14,9 +14,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class FWHMWidget(BaseWidget):
 
-  def __init__(self, parentFrame, imageViewer):
+  def __init__(self, parentFrame):
     super().__init__(parentFrame, "FWHM")
-    self.imageViewer = imageViewer
+    self.stars = None
     self.starFinder = StarFinder()
     self.starMatcher = StarMatcher()
 
@@ -65,10 +65,11 @@ class FWHMWidget(BaseWidget):
         "fwhm_x": df.fwhm_x.mean(),
         "fwhm_y":df.fwhm_y.mean(),
         "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
-
       self.fwhm_data.append(fwhm)
 
       self.render_fwhm_plot()
+
+      self.stars = df
 
       return True
 

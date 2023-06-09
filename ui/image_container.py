@@ -8,29 +8,34 @@ import cv2
 import numpy as np
 from debayer.bilinear import debayer_bilinear
 from debayer.superpixel import debayer_superpixel
-
+import pandas as pd
 from snap_process import ImageData
+from ui.base_widget import BaseWidget
 
-class ImageViewer:
+class ImageViewer(BaseWidget):
 
   def __init__(self, parentFrame):
+    super().__init__(parentFrame, "RGB Image", collapsed=False, expand=True)
     self.image = None
     self.imageScale = 1.0
     self.highlights = None
     self.scaledImg = None
+    self.starHotSpots = []
 
     # Image container
-    self.imageCanvas = tk.Canvas(parentFrame, background="#200")
+    self.imageCanvas = tk.Canvas(self.widgetFrame, background="#200")
     self.image_container = None
     self.crosshairs = None
-    hbar=ttk.Scrollbar(parentFrame, orient=tk.HORIZONTAL)
+    hbar=ttk.Scrollbar(self.widgetFrame, orient=tk.HORIZONTAL)
     hbar.pack(side=tk.BOTTOM, fill=tk.X)
     hbar.config(command=self.imageCanvas.xview)
-    vbar=ttk.Scrollbar(parentFrame, orient=tk.VERTICAL)
+    vbar=ttk.Scrollbar(self.widgetFrame, orient=tk.VERTICAL)
     vbar.pack(side=tk.RIGHT, fill=tk.Y)
     vbar.config(command=self.imageCanvas.yview)
     self.imageCanvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-    self.imageCanvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+    self.imageCanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    # Bind the mouse click event to the canvas
+    self.imageCanvas.bind("<Button-1>", self._onMouseClick)
 
     # self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     self.gamma = tk.DoubleVar(value=1.0)
@@ -38,7 +43,7 @@ class ImageViewer:
     self.updateGammaTable()
 
     # Buttons
-    imageControlPanel = ttk.Frame(parentFrame)
+    imageControlPanel = ttk.Frame(self.widgetFrame)
     ttk.Button(imageControlPanel, text="+", command=self.zoomin, style='X.TButton', width=2).pack(side=tk.LEFT)
     ttk.Button(imageControlPanel, text="-", command=self.zoomout, style='X.TButton', width=2).pack(side=tk.LEFT)
     gammaFrame = ttk.Frame(imageControlPanel, width=100)
@@ -57,30 +62,30 @@ class ImageViewer:
 
   def onGammaChange(self, ev):
     self.updateGammaTable()
-    self.displayScaledImg()
+    self._refreshDisplay()
 
-  def update(self):
-    if self.image is not None:
-      imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
-      print(imgCanvasWidth, imgCanvasHeight)
-      imgAspect = self.image.shape[0] / self.image.shape[1]
+  def _scaleImage(self):
+    if self.image is None:
+      return
+    imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
+    print(imgCanvasWidth, imgCanvasHeight)
+    imgAspect = self.image.shape[0] / self.image.shape[1]
 
-      if imgCanvasWidth * imgAspect <= imgCanvasHeight:
-        w = imgCanvasWidth
-        h = int(imgCanvasWidth * imgAspect)
-      else:
-        w = int(imgCanvasHeight / imgAspect)
-        h = imgCanvasHeight
-      self.scaleX = (w*self.imageScale) / self.image.shape[1]
-      self.scaleY = (h*self.imageScale) / self.image.shape[0]
-      
-      scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
-      if scaledImg.dtype == np.uint16:
-        scaledImg = (scaledImg / 256).astype(np.uint8)
-      self.scaledImg = scaledImg
-      self.displayScaledImg()
+    if imgCanvasWidth * imgAspect <= imgCanvasHeight:
+      w = imgCanvasWidth
+      h = int(imgCanvasWidth * imgAspect)
+    else:
+      w = int(imgCanvasHeight / imgAspect)
+      h = imgCanvasHeight
+    self.scaleX = (w*self.imageScale) / self.image.shape[1]
+    self.scaleY = (h*self.imageScale) / self.image.shape[0]
+    
+    scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
+    if scaledImg.dtype == np.uint16:
+      scaledImg = (scaledImg / 256).astype(np.uint8)
+    self.scaledImg = scaledImg
 
-  def displayScaledImg(self):
+  def _refreshDisplay(self):
     if self.scaledImg is None:
       return
     img = self.scaledImg
@@ -107,33 +112,34 @@ class ImageViewer:
     c_x, c_y = w//2, h//2
     if self.image_container is None:
       self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
-      self.crosshairs = "crosshairs"
-      crosshairs = [
-        self.imageCanvas.create_oval(c_x-25, c_y-25, c_x+25, c_y+25, outline="red"),
-        self.imageCanvas.create_line(c_x-50, c_y, c_x+50, c_y, fill='red'),
-        self.imageCanvas.create_line(c_x, c_y-50, c_x, c_y+50, fill='red'),
-      ]
-      for item in crosshairs:
-        self.imageCanvas.itemconfig(item, tags=(self.crosshairs))
+      self.imageCanvas.create_oval(c_x-25, c_y-25, c_x+25, c_y+25, outline="red", tags='crosshairs')
+      self.imageCanvas.create_line(c_x-50, c_y, c_x+50, c_y, fill='red', tags='crosshairs')
+      self.imageCanvas.create_line(c_x, c_y-50, c_x, c_y+50, fill='red', tags='crosshairs')
     else:
       self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
-      self.imageCanvas.moveto(self.crosshairs, c_x-25, c_y-25)
+      self.imageCanvas.moveto('crosshairs', c_x-25, c_y-25)
 
 
   def zoomin(self):
     if self.imageScale < 5:
       self.imageScale += 0.5
-      self.update()
+      self._scaleImage()
+      self._refreshDisplay()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def zoomout(self):
     if self.imageScale > 0.5:
       self.imageScale -= 0.5
-      self.update()
+      self._scaleImage()
+      self._refreshDisplay()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
       
+  def resize(self, event):
+    self._scaleImage()
+    self._refreshDisplay()
+    self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
-  def setImage(self, imgData: ImageData):
+  def _update(self, imgData: ImageData):
     start_time = time.time_ns()
     if imgData.image is None:
         ext = imgData.fname[-3:].lower()
@@ -188,13 +194,28 @@ class ImageViewer:
     self.image = img
     print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}")
 
-    self.update()
-    return self.image
+    self._scaleImage()
+    self._refreshDisplay()
+    return True
 
-  def resize(self, event):
-    self.update()
-    self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+  def setStars(self, stars: pd.DataFrame):
+    self.imageCanvas.delete('star_bbox')
+    self.starHotSpots = {}
+    for idx, star in stars.iterrows():
+      sx = int(star['cluster_cx'] * self.scaleX)
+      sy = int(star['cluster_cy'] * self.scaleY)
+      print('bbox', sx-5, sy-5, sx+5, sy+5)
+      itemid = self.imageCanvas.create_oval(sx-5, sy-5, sx+5, sy+5, outline="red", tags='star_bbox')
+      self.starHotSpots[itemid] = (sx-5, sy-5, sx+5, sy+5)
 
+  def _onMouseClick(self, event):
+    x, y = event.x, event.y
+    # Perform hit test on ovals
+    overlapping_items = self.imageCanvas.find_closest(x, y, 10, min(self.starHotSpots.keys()))
+    # Check if any oval was hit
+    if overlapping_items:
+        # Handle the hit oval
+        print(f"Clicked {event.widget.find_closest(event.x, event.y)} = {overlapping_items[0]}")
 
   def highlightStars(self, star_centroids):
     if self.highlights is not None:

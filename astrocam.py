@@ -109,8 +109,8 @@ class AstroCam:
 
         # Image container
         imageViewerFrame = ttk.Frame(parentFrame)
-        self.imageViewer = ImageViewer(imageViewerFrame)
         imageViewerFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
+        self.imageViewer = ImageViewer(imageViewerFrame)
 
         # Control panel on right
         scrollableControlPanelFrame = self.createScollableControlPanel(parentFrame)
@@ -152,7 +152,7 @@ class AstroCam:
 
         # Star stats
         starStatFrame = ttk.Frame(widgetsFrame)
-        self.fwhmWidget = FWHMWidget(widgetsFrame, self.imageViewer)
+        self.fwhmWidget = FWHMWidget(widgetsFrame)
         starStatFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
         widgetsFrame.pack(fill=tk.BOTH, side=tk.TOP)
@@ -165,27 +165,20 @@ class AstroCam:
         # Add the content_frame to the canvas
         parentFrame.pack(fill=tk.BOTH, expand=True)
 
-    def createScollableControlPanel(self, parentFrame):
+    def createScollableControlPanel(self, parentFrame, width=350):
         controlPanelFrame = ttk.Frame(parentFrame)
-
-        # Create a vertical scrollbar
-        scrollbar = ttk.Scrollbar(controlPanelFrame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Create a canvas to hold the content of controlPanelFrame
-        canvas = tk.Canvas(controlPanelFrame, yscrollcommand=scrollbar.set, background="#200")
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # Configure the scrollbar to scroll the canvas
-        scrollbar.config(command=canvas.yview)
-
-        # Create a frame inside the canvas for the content of controlPanelFrame
-        scrollableControlPanelFrame = ttk.Frame(canvas)
-
-        canvas.create_window((0, 0), window=scrollableControlPanelFrame, anchor=tk.NW)
-        scrollableControlPanelFrame.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
         controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
-
+        # Create a canvas to hold the content of controlPanelFrame
+        canvas = tk.Canvas(controlPanelFrame, background="#200", width=width)
+        # Create a frame inside the canvas for the content of controlPanelFrame
+        scrollableControlPanelFrame = ttk.Frame(canvas, width=width)
+        # Create a vertical scrollbar
+        scrollbar = ttk.Scrollbar(controlPanelFrame, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        canvas.create_window((0, 0), window=scrollableControlPanelFrame, anchor=tk.NW)
+        scrollableControlPanelFrame.bind("<Configure>", lambda evt: canvas.configure(scrollregion=canvas.bbox("all")))
         return scrollableControlPanelFrame
 
     def setupControlBoard(self, frame):
@@ -403,8 +396,8 @@ class AstroCam:
                 output_fname = None
 
             imageData = ImageData(img, output_fname, hdr)
-            img = self.imageViewer.setImage(imageData)
-            self.histoViewer.update(img)
+            self.imageViewer.update(imageData)
+            self.histoViewer.update(self.imageViewer.image)
             imageData.close()
 
         # Start next exposure
@@ -433,13 +426,13 @@ class AstroCam:
                     time.sleep(job['frame_delay'])
                 
                 if job['image_type'] == 'Light':
-                    self.fwhmWidget.update(img)
+                    if self.fwhmWidget.update(self.imageViewer.image):
+                        self.imageViewer.setStars(self.fwhmWidget.stars)
                 # Trigger next exposure
                 self.startNextExposure(job)
         else:
             self.endRunningExposures("Finished")
             return
-
 
     def endRunningExposures(self, msg):
         self.runningExposures = 0
