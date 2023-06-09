@@ -26,6 +26,7 @@ class ImageViewer(BaseWidget):
     self.imageCanvas = tk.Canvas(self.widgetFrame, background="#200")
     self.image_container = None
     self.crosshairs = None
+    self.tooltipLabel = tk.Label(self.imageCanvas, background="#FFFFDD", relief="solid", borderwidth=1)
     hbar=ttk.Scrollbar(self.widgetFrame, orient=tk.HORIZONTAL)
     hbar.pack(side=tk.BOTTOM, fill=tk.X)
     hbar.config(command=self.imageCanvas.xview)
@@ -199,23 +200,36 @@ class ImageViewer(BaseWidget):
     return True
 
   def setStars(self, stars: pd.DataFrame):
+    self.stars = stars
     self.imageCanvas.delete('star_bbox')
     self.starHotSpots = {}
-    for idx, star in stars.iterrows():
+
+    def show_tooltip(event, itemid, star):
+      x, y, _, _ = self.imageCanvas.coords(itemid)
+      self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x}, {star.fwhm_y}")
+      self.tooltipLabel.place(x=x, y=y-20)
+
+    for idx, star in self.stars.iterrows():
       sx = int(star['cluster_cx'] * self.scaleX)
       sy = int(star['cluster_cy'] * self.scaleY)
       print('bbox', sx-5, sy-5, sx+5, sy+5)
       itemid = self.imageCanvas.create_oval(sx-5, sy-5, sx+5, sy+5, outline="red", tags='star_bbox')
-      self.starHotSpots[itemid] = (sx-5, sy-5, sx+5, sy+5)
+      # self.imageCanvas.tag_bind(itemid, "<Button-1>", lambda evt: show_tooltip(evt, itemid, star))
+      # self.imageCanvas.tag_bind(itemid, "<Enter>", lambda evt: show_tooltip(evt, itemid, star))
+      self.imageCanvas.tag_bind(itemid, "<Leave>", lambda evt: self.tooltipLabel.place_forget())
+      self.starHotSpots[itemid] = star
 
   def _onMouseClick(self, event):
     x, y = event.x, event.y
     # Perform hit test on ovals
-    overlapping_items = self.imageCanvas.find_closest(x, y, 10, min(self.starHotSpots.keys()))
+    overlapping_items = self.imageCanvas.find_closest(x, y, 5, max(self.starHotSpots.keys())+1)
     # Check if any oval was hit
-    if overlapping_items:
+    if overlapping_items and overlapping_items[0] in self.starHotSpots:
         # Handle the hit oval
-        print(f"Clicked {event.widget.find_closest(event.x, event.y)} = {overlapping_items[0]}")
+        star = self.starHotSpots[overlapping_items[0]]
+        print(f"Clicked {star}")
+        self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
+        self.tooltipLabel.place(x=x, y=y-20)
 
   def highlightStars(self, star_centroids):
     if self.highlights is not None:
