@@ -398,6 +398,9 @@ class AstroCam:
             imageData = ImageData(img, output_fname, hdr)
             self.imageViewer.update(imageData)
             self.histoViewer.update(self.imageViewer.image)
+            if job['image_type'] == 'Light' and not self.runningLiveView:
+                    if self.fwhmWidget.update(self.imageViewer.image):
+                        self.imageViewer.setStars(self.fwhmWidget.stars)
             imageData.close()
 
         # Start next exposure
@@ -424,10 +427,7 @@ class AstroCam:
                 # Delay step
                 if 'frame_delay' in job:
                     time.sleep(job['frame_delay'])
-                
-                if job['image_type'] == 'Light':
-                    if self.fwhmWidget.update(self.imageViewer.image):
-                        self.imageViewer.setStars(self.fwhmWidget.stars)
+
                 # Trigger next exposure
                 self.startNextExposure(job)
         else:

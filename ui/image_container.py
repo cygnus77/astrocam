@@ -20,6 +20,7 @@ class ImageViewer(BaseWidget):
     self.imageScale = 1.0
     self.highlights = None
     self.scaledImg = None
+    self.stars = None
     self.starHotSpots = []
 
     # Image container
@@ -126,6 +127,7 @@ class ImageViewer(BaseWidget):
       self.imageScale += 0.5
       self._scaleImage()
       self._refreshDisplay()
+      self.setStars(self.stars)
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def zoomout(self):
@@ -133,11 +135,13 @@ class ImageViewer(BaseWidget):
       self.imageScale -= 0.5
       self._scaleImage()
       self._refreshDisplay()
+      self.setStars(self.stars)
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
       
   def resize(self, event):
     self._scaleImage()
     self._refreshDisplay()
+    self.setStars(self.stars)
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def _update(self, imgData: ImageData):
@@ -195,6 +199,7 @@ class ImageViewer(BaseWidget):
     self.image = img
     print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}")
 
+    self.stars = None
     self._scaleImage()
     self._refreshDisplay()
     return True
@@ -203,6 +208,8 @@ class ImageViewer(BaseWidget):
     self.stars = stars
     self.imageCanvas.delete('star_bbox')
     self.starHotSpots = {}
+    if self.stars is None:
+       return
 
     def show_tooltip(event, itemid, star):
       x, y, _, _ = self.imageCanvas.coords(itemid)
@@ -230,16 +237,3 @@ class ImageViewer(BaseWidget):
         print(f"Clicked {star}")
         self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
         self.tooltipLabel.place(x=x, y=y-20)
-
-  def highlightStars(self, star_centroids):
-    if self.highlights is not None:
-      self.imageCanvas.delete(self.highlights)
-    else:
-      self.highlights = "highlights"
-    
-    for sc_x, sc_y in star_centroids:
-      sx = sc_x * self.scaleX
-      sy = sc_y * self.scaleY
-      item = self.imageCanvas.create_oval(sx-5, sy-5, sx+5, sy+5, outline="yellow")
-      self.imageCanvas.itemconfig(item, tags=(self.highlights))
-
