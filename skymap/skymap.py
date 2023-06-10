@@ -1,4 +1,5 @@
 import math
+import re
 from pymongo import MongoClient
 from astropy.coordinates import SkyCoord
 from astropy import units as u
@@ -65,6 +66,11 @@ class SkyMap:
     searchresult = ", ".join(objects)
     self.cache[cache_key] = searchresult
     return searchresult
+  
+  def searchName(self, term):
+    cursor = self.db.stars.find({'_id':{'$regex': re.compile(term, re.IGNORECASE)}}, limit=10)
+    return [star for star in cursor]
+
 
 def _test():
   m81 = SkyCoord.from_name("M81")
@@ -82,6 +88,9 @@ if __name__ == "__main__":
   # M101 RA: 14h04m00.0s
   c1 = SkyCoord(14.066564 * u.hour, 54.218594 * u.degree, frame=ICRS)
   with SkyMap() as sm:
+    results = sm.searchName("andro")
+    for result in results:
+      print(result)
     print(sm.findObjects(c1, fov_deg=1))
 
   _test()

@@ -45,6 +45,7 @@ class AstroCam:
         self.cancelJob = False
         self.image_queue = Queue(1000)  
         self.req_queue = Queue(1000)
+        self.pollingCounter = 0
 
         ##############VARIABLES##############
         self.runStatus = tk.StringVar()
@@ -57,11 +58,6 @@ class AstroCam:
         self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.image_type = tk.StringVar()
         self.image_type.set("Light")
-
-        self.delay_time = tk.DoubleVar()
-        self.delay_time.set(0)
-        self.focuser_shift = tk.IntVar()
-        self.focuser_shift.set(0)
 
         self.obsObject = tk.StringVar()
         self.obsObject.set("Unknown")
@@ -223,18 +219,6 @@ class AstroCam:
         ttk.Button(expFrame,text="\u2191",command=self.exp_number_up, style='X.TButton', width=2).pack(side=tk.LEFT)
         expFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
 
-        # Additional settings
-        extrasFrame = ttk.Frame(settingsFrame)
-        delayFrame = ttk.Frame(extrasFrame)
-        ttk.Label(delayFrame,text="Delay").pack(side=tk.LEFT)
-        ttk.Entry(delayFrame, textvariable=self.delay_time, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
-        delayFrame.pack(fill=tk.X, side=tk.LEFT)
-        focusShiftFrame = ttk.Frame(extrasFrame)
-        ttk.Label(focusShiftFrame,text="Focus Shift").pack(side=tk.LEFT)
-        ttk.Entry(focusShiftFrame, textvariable=self.focuser_shift, font=self.EntryFont, width=self.entryWidth).pack(side=tk.LEFT)
-        focusShiftFrame.pack(fill=tk.X, side=tk.RIGHT)
-        extrasFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
-
         settingsFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
         # Main buttons to start sequences
@@ -284,8 +268,6 @@ class AstroCam:
             "longitude": self.longitude.get(),
             "iso": self.iso_number.get(),
             "exp": self.exp_time.get(),
-            'focuser_adj':  self.focuser_shift.get(),
-            'frame_delay':  self.delay_time.get(),
             "image_type": self.image_type.get(),
         }
 
@@ -422,13 +404,7 @@ class AstroCam:
                 return
             else:
                 # Execute after exposure steps
-                # Focuser step
-                if job['focuser_adj']:
-                    self.focuser.movein(job['focuser_adj'])
-                # Delay step
-                if 'frame_delay' in job:
-                    time.sleep(job['frame_delay'])
-
+                
                 # Trigger next exposure
                 self.startNextExposure(job)
         else:
@@ -508,11 +484,18 @@ class AstroCam:
 
     def statusPolling(self):
         if self.connected:
-            self.mountStatusWidget.update()
-            self.coolerWidget.update()
-            self.focuserWidget.update()
-
-            self.root.after(5000, self.statusPolling)
+            if self.pollingCounter == 0:
+                pass
+            elif self.pollingCounter == 1:
+                self.mountStatusWidget.update()
+            elif self.pollingCounter == 2:
+                self.coolerWidget.update()
+            elif self.pollingCounter == 3:
+                self.focuserWidget.update()
+            self.pollingCounter += 1
+            if self.pollingCounter == 4:
+                self.pollingCounter = 0
+            self.root.after(1000, self.statusPolling)
 
     def toggleconnect(self):
         if self.connected:

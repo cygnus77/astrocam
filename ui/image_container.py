@@ -21,7 +21,7 @@ class ImageViewer(BaseWidget):
     self.highlights = None
     self.scaledImg = None
     self.stars = None
-    self.starHotSpots = []
+    self.starHotSpots = {}
     self.onTargetStarChanged = None
 
     # Image container
@@ -227,6 +227,8 @@ class ImageViewer(BaseWidget):
       self.starHotSpots[itemid] = star
 
   def _onMouseClick(self, event):
+    if len(self.starHotSpots) == 0:
+       return
     x, y = event.x, event.y
     # Perform hit test on ovals
     overlapping_items = self.imageCanvas.find_closest(x, y, 5, max(self.starHotSpots.keys())+1)
