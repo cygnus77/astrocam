@@ -16,7 +16,6 @@ class FWHMWidget(BaseWidget):
 
   def __init__(self, parentFrame):
     super().__init__(parentFrame, "FWHM")
-    self.stars = None
     self.starFinder = StarFinder()
     self.starMatcher = StarMatcher()
 
@@ -24,16 +23,16 @@ class FWHMWidget(BaseWidget):
     tk_canvas = tk.Canvas(self.widgetFrame, width=250, height=250, background="#200")
     tk_canvas.pack()
 
-    fig = Figure(figsize=(2.5, 2.5), dpi=100)
-    fig.set_facecolor("#200")
-    self.ax = fig.add_subplot(111)
+    self.fig = Figure(figsize=(2.5, 2.5), dpi=100)
+    self.fig.set_facecolor("#200")
+    self.ax = self.fig.add_subplot(111)
     self.ax.set_facecolor("#200")
     self.ax.tick_params(axis='x', colors='white')
     self.ax.tick_params(axis='y', colors='white')
     self.ax2 = self.ax.twinx()
     self.ax2.tick_params(axis='y', colors='white')
     
-    self.canvas = FigureCanvasTkAgg(fig, master=tk_canvas)
+    self.canvas = FigureCanvasTkAgg(self.fig, master=tk_canvas)
     self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
     # Reset button
@@ -50,6 +49,8 @@ class FWHMWidget(BaseWidget):
 
   def reset(self):
     self.fwhm_data = []
+    self.stars = []
+    self.targetStar = []
     self.render_fwhm_plot()
 
   def _update(self, img16: np.ndarray):
@@ -66,15 +67,23 @@ class FWHMWidget(BaseWidget):
         "fwhm_y":df.fwhm_y.mean(),
         "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
       self.fwhm_data.append(fwhm)
-
       self.render_fwhm_plot()
-
       self.stars = df
+
+      if self.targetStar:
+        s =  self.targetStar[-1][1]
+        y = df[(abs(df.cluster_cx - s.cluster_cx) < 5) & (abs(df.cluster_cy - s.cluster_cy) < 5)]
+        if len(y):
+          self.targetStar.append((len(self.fwhm_data), y.iloc[0]))
 
       return True
 
+  def setTargetStar(self, star):
+    self.targetStar = [(len(self.fwhm_data), star)]
+
   def render_fwhm_plot(self):
     self.ax.clear()
+    self.ax2.clear()
     if len(self.fwhm_data) == 0:
       self.canvas.draw()
       return
@@ -83,11 +92,16 @@ class FWHMWidget(BaseWidget):
     y = np.array([x['fwhm_ave'] for x in self.fwhm_data])
     x = np.arange(len(self.fwhm_data))
     self.ax.plot(y, label="ave")
+    if self.targetStar:
+      self.ax.plot([x[0] for x in self.targetStar], [(x[1].fwhm_x + x[1].fwhm_y)/2 for x in self.targetStar], label='target')
 
+    # Star count
     self.ax2.plot([x['numstars'] for x in self.fwhm_data], 'g--', label="n")
 
+    # Trend line
     z = np.polyfit(x, y, 1)
     p = np.poly1d(z)
     self.ax.plot(x, p(x))
+    self.fig.legend(loc='upper left')
     self.canvas.draw()
     self.hdrInfo.set(f"{y[-1]:.2f} px")

@@ -154,6 +154,7 @@ class AstroCam:
         starStatFrame = ttk.Frame(widgetsFrame)
         self.fwhmWidget = FWHMWidget(widgetsFrame)
         starStatFrame.pack(fill=tk.BOTH, side=tk.TOP)
+        self.imageViewer.onTargetStarChanged = lambda star: self.fwhmWidget.setTargetStar(star)
 
         widgetsFrame.pack(fill=tk.BOTH, side=tk.TOP)
 
@@ -498,7 +499,7 @@ class AstroCam:
         if self.runningExposures:
             try:
                 for i in range(expnum-newexp):
-                    self.req_queue.get_nowait(1)
+                    self.req_queue.get_nowait()
             except queue.Empty:
                 pass
 

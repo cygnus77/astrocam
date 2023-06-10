@@ -22,6 +22,7 @@ class ImageViewer(BaseWidget):
     self.scaledImg = None
     self.stars = None
     self.starHotSpots = []
+    self.onTargetStarChanged = None
 
     # Image container
     self.imageCanvas = tk.Canvas(self.widgetFrame, background="#200")
@@ -219,7 +220,6 @@ class ImageViewer(BaseWidget):
     for idx, star in self.stars.iterrows():
       sx = int(star['cluster_cx'] * self.scaleX)
       sy = int(star['cluster_cy'] * self.scaleY)
-      print('bbox', sx-5, sy-5, sx+5, sy+5)
       itemid = self.imageCanvas.create_oval(sx-5, sy-5, sx+5, sy+5, outline="red", tags='star_bbox')
       # self.imageCanvas.tag_bind(itemid, "<Button-1>", lambda evt: show_tooltip(evt, itemid, star))
       # self.imageCanvas.tag_bind(itemid, "<Enter>", lambda evt: show_tooltip(evt, itemid, star))
@@ -234,6 +234,8 @@ class ImageViewer(BaseWidget):
     if overlapping_items and overlapping_items[0] in self.starHotSpots:
         # Handle the hit oval
         star = self.starHotSpots[overlapping_items[0]]
+        if self.onTargetStarChanged:
+           self.onTargetStarChanged(star)
         print(f"Clicked {star}")
         self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
         self.tooltipLabel.place(x=x, y=y-20)

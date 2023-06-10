@@ -1,14 +1,14 @@
 TODO:
-- Hit test and track selected star's fwhm
 - Cooler - faster cooling and warmimg ?
+- background subtract for FWHM ?
 
 - Job queue
   - Gotos for targets
     - Target selection
     - Nudge
   - Park at CWD
+  - Triangulate exact position
 
 - Video stream
 - Park scope
-- Shift focuser based on function(frame, time, temp)
 - Convolutions for bilinear debayering
