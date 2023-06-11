@@ -2,19 +2,21 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from skymap.skymap import SkyMap
 import psutil
+from snap_process import ImageData
 from ui.base_widget import BaseWidget
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 from astropy.coordinates import ICRS
-import requests
+import pandas as pd
 from settings import config
 
 
 class MountStatusWidget(BaseWidget):
-    def __init__(self, parentFrame, device) -> None:
+    def __init__(self, parentFrame, astrocam, device) -> None:
         super().__init__(parentFrame, "Mount")
         self._connectSkyMap()
         self.device = device
+        self.astrocam = astrocam
 
         statusFrame = ttk.Frame(self.widgetFrame)
         # Textbox to show coordinates
@@ -84,9 +86,13 @@ class MountStatusWidget(BaseWidget):
             coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
             self.device.moveto(coord)
         return
-    
+
+    def _refine_callback(self, imageData: ImageData, stars: pd.DataFrame):
+        print(len(stars))
+
     def _refine(self):
-        return
+        self.astrocam.onImageReady.append(self._refine_callback)
+        self.astrocam.takeSnapshot()
 
 
 class GotoObjectSelector(tk.Toplevel):

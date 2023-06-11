@@ -46,6 +46,7 @@ class AstroCam:
         self.image_queue = Queue(1000)  
         self.req_queue = Queue(1000)
         self.pollingCounter = 0
+        self.onImageReady = [] # functions to call on image ready
 
         ##############VARIABLES##############
         self.runStatus = tk.StringVar()
@@ -148,7 +149,7 @@ class AstroCam:
 
         # Setup mount status
         mountStatusFrame = ttk.Frame(widgetsFrame)
-        self.mountStatusWidget = MountStatusWidget(mountStatusFrame, self.mount)
+        self.mountStatusWidget = MountStatusWidget(mountStatusFrame, self, self.mount)
         mountStatusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Star stats
@@ -385,8 +386,11 @@ class AstroCam:
             self.imageViewer.update(imageData)
             self.histoViewer.update(self.imageViewer.image)
             if job['image_type'] == 'Light' and not self.runningLiveView:
-                    if self.fwhmWidget.update(self.imageViewer.image):
-                        self.imageViewer.setStars(self.fwhmWidget.stars)
+                if self.fwhmWidget.update(self.imageViewer.image):
+                    self.imageViewer.setStars(self.fwhmWidget.stars)
+                    if self.onImageReady:
+                        fn = self.onImageReady.pop()
+                        fn(imageData, self.fwhmWidget.stars)
             imageData.close()
 
         # Start next exposure
@@ -487,17 +491,9 @@ class AstroCam:
 
     def statusPolling(self):
         if self.connected:
-            if self.pollingCounter == 0:
-                pass
-            elif self.pollingCounter == 1:
-                self.mountStatusWidget.update()
-            elif self.pollingCounter == 2:
-                self.coolerWidget.update()
-            elif self.pollingCounter == 3:
-                self.focuserWidget.update()
+            arr = [self.mountStatusWidget, self.coolerWidget, self.focuserWidget]
+            arr[self.pollingCounter % len(arr)].update()
             self.pollingCounter += 1
-            if self.pollingCounter == 4:
-                self.pollingCounter = 0
             self.root.after(1000, self.statusPolling)
 
     def toggleconnect(self):
