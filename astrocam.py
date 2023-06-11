@@ -101,15 +101,20 @@ class AstroCam:
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
 
         # Layout
-        parentFrame=ttk.Frame(self.root, relief=tk.RAISED)
+        paned_window = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True)
 
         # Image container
-        imageViewerFrame = ttk.Frame(parentFrame)
+        imageViewerFrame = ttk.Frame(paned_window)
         imageViewerFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
         self.imageViewer = ImageViewer(imageViewerFrame)
 
         # Control panel on right
-        scrollableControlPanelFrame = self.createScollableControlPanel(parentFrame)
+        scrollableControlPanelFrame, controlPanelFrame = self.createScollableControlPanel(paned_window)
+
+        # Add the frames to the PanedWindow
+        paned_window.add(imageViewerFrame, weight=5)
+        paned_window.add(controlPanelFrame, weight=1)
 
         # Histogram
         histoFrame=tk.Frame(scrollableControlPanelFrame, bg='black')
@@ -159,11 +164,9 @@ class AstroCam:
         self.setupControlBoard(imagingControlsFrame)
         imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
-        # Add the content_frame to the canvas
-        parentFrame.pack(fill=tk.BOTH, expand=True)
 
     def createScollableControlPanel(self, parentFrame, width=350):
-        controlPanelFrame = ttk.Frame(parentFrame)
+        controlPanelFrame = ttk.Frame(parentFrame, width=width)
         controlPanelFrame.pack(fill=tk.Y, side=tk.RIGHT)
         # Create a canvas to hold the content of controlPanelFrame
         canvas = tk.Canvas(controlPanelFrame, background="#200", width=width)
@@ -176,7 +179,7 @@ class AstroCam:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         canvas.create_window((0, 0), window=scrollableControlPanelFrame, anchor=tk.NW)
         scrollableControlPanelFrame.bind("<Configure>", lambda evt: canvas.configure(scrollregion=canvas.bbox("all")))
-        return scrollableControlPanelFrame
+        return scrollableControlPanelFrame, controlPanelFrame
 
     def setupControlBoard(self, frame):
         settingsFrame = ttk.Frame(frame)
