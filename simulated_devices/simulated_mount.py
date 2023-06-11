@@ -39,8 +39,8 @@ class SimulatedMount():
     def atpark(self):
         return False
 
-    def moveto(self, ra, dec):
-        self.coordinates = SkyCoord(ra * u.degree, dec * u.degree)
+    def moveto(self, coord: SkyCoord):
+        self._coordinates = coord
 
     def park(self):
         return

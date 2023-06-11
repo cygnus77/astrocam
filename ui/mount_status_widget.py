@@ -4,6 +4,8 @@ from skymap.skymap import SkyMap
 import psutil
 from ui.base_widget import BaseWidget
 from astropy.coordinates import SkyCoord
+from astropy import units as u
+from astropy.coordinates import ICRS
 import requests
 from settings import config
 
@@ -78,6 +80,9 @@ class MountStatusWidget(BaseWidget):
         goto_obj_sel.wait_window()
         if goto_obj_sel.selected_object:
             print(goto_obj_sel.selected_object)
+            icrs_deg = goto_obj_sel.selected_object["icrs"]["deg"]
+            coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
+            self.device.moveto(coord)
         return
     
     def _refine(self):

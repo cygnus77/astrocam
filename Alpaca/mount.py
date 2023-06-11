@@ -42,10 +42,10 @@ class Mount(AscomDevice):
     def atpark(self):
         return self._get("atpark")
 
-    def moveto(self, ra, dec):
+    def moveto(self, coord: SkyCoord):
         self._put("slewtocoordinatesasync", {
-            "RightAscension": ra,
-            "Declination": dec
+            "RightAscension": coord.ra.hour,
+            "Declination": coord.dec.degree
         })
 
     def park(self):
