@@ -1,5 +1,6 @@
 import math
 import re
+import pandas as pd
 from pymongo import MongoClient
 from astropy.coordinates import SkyCoord
 from astropy import units as u
@@ -70,6 +71,44 @@ class SkyMap:
   def searchName(self, term):
     cursor = self.db.stars.find({'_id':{'$regex': re.compile(term, re.IGNORECASE)}}, limit=10)
     return [star for star in cursor]
+  
+  def coneSearch(self, coord: SkyCoord, fov_deg: float, limit:int=None):
+    # Conver fov to meters for mongo query
+    fov_rad = math.radians(fov_deg / 2.0) # radius from fov_deg which is diameter
+    fov_meters = 6378.1 * 1000 * fov_rad
+
+    ra, dec = coord.ra.degree-180, coord.dec.degree
+    cache_key = (int(ra*100), int(dec*100))
+    if cache_key in self.cache:
+      return self.cache[cache_key]
+
+    pipeline = [
+      { '$geoNear': {
+          'near': {
+            'type': 'Point', 
+            'coordinates': [ra, dec]
+          }, 
+          'maxDistance': fov_meters, 
+          'key': 'icrs.location', 
+          'spherical': True, 
+          'distanceField': 'distance'
+      }},
+      { '$match': {
+          '$and': [
+            {'typ': re.compile('star|binary|supernova', re.IGNORECASE)},
+            {'mag': {'$ne': None}}
+          ]
+      }},
+      { '$sort': {
+          'mag': 1
+      }},
+    ]
+
+    if limit is not None:
+      pipeline.append({'$limit': limit})
+
+    cursor = self.db.stars.aggregate(pipeline)
+    yield from cursor
 
 
 def _test():
@@ -83,8 +122,7 @@ def _test():
   with SkyMap() as sm:
     assert(len(sm.findObjects(m81, sep - 0.1).split(",")) == 1)
 
-
-if __name__ == "__main__":
+def _test_separation():
   # M101 RA: 14h04m00.0s
   c1 = SkyCoord(14.066564 * u.hour, 54.218594 * u.degree, frame=ICRS)
   with SkyMap() as sm:
@@ -104,3 +142,23 @@ if __name__ == "__main__":
   with SkyMap() as sm:
     print(sm.findObjects(c1))
     print(sm.findObjects(c2))
+
+if __name__ == "__main__":
+
+  import matplotlib.pyplot as plt
+  # M101 RA: 14h04m00.0s
+  # c1 = SkyCoord(14.066564 * u.hour, 54.218594 * u.degree, frame=ICRS)
+  c1 = SkyCoord.from_name("Mizar")
+  with SkyMap() as sm:
+    stars = []
+    for star in sm.coneSearch(c1, .50):
+      if 'NAME' in star:
+        print(star['_id'])
+        s_coord = SkyCoord(star['icrs']['deg']['ra'] * u.degree, star['icrs']['deg']['dec'] * u.degree, frame=ICRS)
+        stars.append(s_coord)
+    fig = plt.figure()
+    plt.subplot(projection="aitoff")
+    plt.scatter([x.ra.degree for x in stars], [x.dec.degree for x in stars])
+    plt.grid(True)
+    fig.show()
+    while not fig.waitforbuttonpress(): pass
