@@ -54,29 +54,29 @@ class FWHMWidget(BaseWidget):
     self.render_fwhm_plot()
 
   def _update(self, img16: np.ndarray):
-      assert(img16.dtype == np.uint16)
-      assert(len(img16.shape) == 3)
-      assert(img16.shape[2] == 3)
-      img16 = cv2.cvtColor(img16, cv2.COLOR_RGB2GRAY)
-      img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
-      numStars = 20
-      star_img, df = self.starFinder.find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
-      fwhm = {
-        "numstars": len(df),
-        "fwhm_x": df.fwhm_x.mean(),
-        "fwhm_y":df.fwhm_y.mean(),
-        "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
-      self.fwhm_data.append(fwhm)
-      self.render_fwhm_plot()
-      self.stars = df
+    assert(img16.dtype == np.uint16)
+    assert(len(img16.shape) == 3)
+    assert(img16.shape[2] == 3)
+    img16 = cv2.cvtColor(img16, cv2.COLOR_RGB2GRAY)
+    img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
+    numStars = 20
+    star_img, df = self.starFinder.find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
+    fwhm = {
+      "numstars": len(df),
+      "fwhm_x": df.fwhm_x.mean(),
+      "fwhm_y":df.fwhm_y.mean(),
+      "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
+    self.fwhm_data.append(fwhm)
+    self.render_fwhm_plot()
+    self.stars = df
 
-      if self.targetStar:
-        s =  self.targetStar[-1][1]
-        y = df[(abs(df.cluster_cx - s.cluster_cx) < 5) & (abs(df.cluster_cy - s.cluster_cy) < 5)]
-        if len(y):
-          self.targetStar.append((len(self.fwhm_data), y.iloc[0]))
+    if self.targetStar:
+      s =  self.targetStar[-1][1]
+      y = df[(abs(df.cluster_cx - s.cluster_cx) < 5) & (abs(df.cluster_cy - s.cluster_cy) < 5)]
+      if len(y):
+        self.targetStar.append((len(self.fwhm_data), y.iloc[0]))
 
-      return True
+    return True
 
   def setTargetStar(self, star):
     self.targetStar = [(len(self.fwhm_data), star)]
