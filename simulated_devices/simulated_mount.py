@@ -42,6 +42,9 @@ class SimulatedMount():
     def moveto(self, coord: SkyCoord):
         self._coordinates = coord
 
+    def syncto(self, coord: SkyCoord):
+        self._coordinates = coord
+
     def park(self):
         return
 

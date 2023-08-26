@@ -208,6 +208,7 @@ class ImageViewer(BaseWidget):
   def setStars(self, stars: pd.DataFrame):
     self.stars = stars
     self.imageCanvas.delete('star_bbox')
+    self.imageCanvas.delete('star_name')
     self.starHotSpots = {}
     if self.stars is None:
        return
@@ -241,3 +242,9 @@ class ImageViewer(BaseWidget):
         print(f"Clicked {star}")
         self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
         self.tooltipLabel.place(x=x, y=y-20)
+
+  def annotate(self, name, star):
+    sx = int(star['cluster_cx'] * self.scaleX)
+    sy = int(star['cluster_cy'] * self.scaleY)
+    font = ('Helvetica 8 bold')
+    self.imageCanvas.create_text(sx, sy, text=name, font=font, fill="yellow", tags='star_name')

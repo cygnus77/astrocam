@@ -9,7 +9,8 @@ TODO:
     - Target selection
     - Nudge
   - Park at CWD
-  - Triangulate exact position
+  - Triangulate exact position - with new matcher, db lookup, regression, etc.
+    - Precompute triangles within 2deg FoV; and cache
 
 - Video stream
 - Park scope

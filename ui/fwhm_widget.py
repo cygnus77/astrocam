@@ -98,10 +98,11 @@ class FWHMWidget(BaseWidget):
     # Star count
     self.ax2.plot([x['numstars'] for x in self.fwhm_data], 'g--', label="n")
 
-    # Trend line
-    z = np.polyfit(x, y, 1)
-    p = np.poly1d(z)
-    self.ax.plot(x, p(x))
-    self.fig.legend(loc='upper left')
-    self.canvas.draw()
-    self.hdrInfo.set(f"{y[-1]:.2f} px")
+    if len(x) > 1 and len(y) > 1:
+      # Trend line
+      z = np.polyfit(x, y, 1)
+      p = np.poly1d(z)
+      self.ax.plot(x, p(x))
+      self.fig.legend(loc='upper left')
+      self.canvas.draw()
+      self.hdrInfo.set(f"{y[-1]:.2f} px")

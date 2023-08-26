@@ -129,7 +129,7 @@ class StarMatcher:
         vTriangles = sorted(vTriangles, key=lambda x: x["fX"])
         return pd.DataFrame(vTriangles)
 
-    def _getVertexSortedTriangles(self, df):
+    def _getVertexSortedTriangles(self, df, fov_deg=None):
         # Cache distances between every pair of stars
         starDistances = {}
         for c in combinations(df.index, 2):
@@ -137,15 +137,33 @@ class StarMatcher:
             key = (c[0], c[1])
             x1, y1 = df.loc[c[0],['cluster_cx', 'cluster_cy']]
             x2, y2 = df.loc[c[1],['cluster_cx', 'cluster_cy']]
-            starDistances[key] = math.sqrt((x2-x1)**2 + (y2-y1)**2)
+
+            if fov_deg:
+                ra1, dec1 = df.loc[c[0],['ra', 'dec']]
+                ra2, dec2 = df.loc[c[1],['ra', 'dec']]
+                sphere_dist = math.sqrt((ra2-ra1)**2 + (dec2-dec1)**2)
+            else:
+                sphere_dist = None
+
+            cartesian_dist = math.sqrt((x2-x1)**2 + (y2-y1)**2)
+            starDistances[key] = cartesian_dist, sphere_dist
 
         vTriangles = []
         for i,j,k in combinations(df.index, 3):
 
+            ij, ijam = starDistances[(i, j)]
+            jk, jkam = starDistances[(j, k)]
+            ik, ikam = starDistances[(i, k)]
+
+            if fov_deg and (ijam > fov_deg or
+               jkam > fov_deg or
+               ikam > fov_deg):
+                continue
+
             s, m, l = sorted([
-                (set([i, j]), starDistances[(i, j)]),
-                (set([j, k]), starDistances[(j, k)]),
-                (set([i, k]), starDistances[(i, k)])
+                (set([i, j]), ij),
+                (set([j, k]), jk),
+                (set([i, k]), ik)
             ], key=lambda x:x[1])
 
             A = s[0].intersection(l[0]).pop()

@@ -387,10 +387,15 @@ class AstroCam:
             self.histoViewer.update(self.imageViewer.image)
             if job['image_type'] == 'Light' and not self.runningLiveView:
                 if self.fwhmWidget.update(self.imageViewer.image):
-                    self.imageViewer.setStars(self.fwhmWidget.stars)
+                    stars = self.fwhmWidget.stars
+                    self.imageViewer.setStars(stars)
                     if self.onImageReady:
                         fn = self.onImageReady.pop()
-                        fn(imageData, self.fwhmWidget.stars)
+                        fn(imageData, stars)
+                        if 'name' in stars.columns:
+                            for idx, star in stars[~stars.name.isnull()].iterrows():
+                                self.imageViewer.annotate(star.name, star)
+
             imageData.close()
 
         # Start next exposure
@@ -503,9 +508,12 @@ class AstroCam:
 
             self.connectBtn['image'] = self.on_icon
             self.connected = False
-            self.mount.close()
-            self.camera.close()
-            self.focuser.close()
+            if self.mount:
+                self.mount.close()
+            if self.camera:
+               self.camera.close()
+            if self.focuser:
+                self.focuser.close()
             self.mount = None
             self.camera = None
             self.focuser = None

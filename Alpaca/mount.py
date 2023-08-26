@@ -48,6 +48,12 @@ class Mount(AscomDevice):
             "Declination": coord.dec.degree
         })
 
+    def syncto(self, coord: SkyCoord):
+        self._put("synctocoordinates", {
+            "RightAscension": coord.ra.hour,
+            "Declination": coord.dec.degree
+        })
+
     def park(self):
         self._put("findhome", {})
         while not self._get("athome"):
