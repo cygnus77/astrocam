@@ -1,7 +1,7 @@
 import tkinter as tk
 import tkinter.ttk as ttk
 from skymap.skymap import SkyMap
-from skymap.platesolver import platesolve
+import skymap.platesolver as PS
 import psutil
 from snap_process import ImageData
 from ui.base_widget import BaseWidget
@@ -90,9 +90,13 @@ class MountStatusWidget(BaseWidget):
 
     def _refine_callback(self, imageData: ImageData, stars: pd.DataFrame):
         print(len(stars))
-        view_center = platesolve(imageData, stars, self.device.coordinates)
+        stars, view_center = PS.platesolve(imageData, stars, self.device.coordinates)
+        if view_center == None:
+            print("No solution")
+            return
         print(view_center)
         self.device.syncto(view_center)
+        return stars
 
     def _refine(self):
         self.astrocam.onImageReady.append(self._refine_callback)

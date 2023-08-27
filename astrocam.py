@@ -388,13 +388,10 @@ class AstroCam:
             if job['image_type'] == 'Light' and not self.runningLiveView:
                 if self.fwhmWidget.update(self.imageViewer.image):
                     stars = self.fwhmWidget.stars
-                    self.imageViewer.setStars(stars)
                     if self.onImageReady:
                         fn = self.onImageReady.pop()
-                        fn(imageData, stars)
-                        if 'name' in stars.columns:
-                            for idx, star in stars[~stars.name.isnull()].iterrows():
-                                self.imageViewer.annotate(star.name, star)
+                        stars = fn(imageData, stars)
+                        self.imageViewer.setStars(stars)
 
             imageData.close()
 

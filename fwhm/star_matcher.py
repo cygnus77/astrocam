@@ -13,7 +13,8 @@ class StarMatcher:
                    vertex_sorted = True,
                    down_votes = True,
                    absolute_similar = True,
-                   vote_with_conf = True):
+                   vote_with_conf = True,
+                   limit_ref_triangle_fov=None):
         """ matchStars in a reference and target dataframes from either database or a photo
             Adds columns to target dataframe: starno (index in reference dataframe) and votes (int)
             Returns votes and voting pairs for informational purposes
@@ -21,7 +22,7 @@ class StarMatcher:
         """
 
         if vertex_sorted:
-            tri_ref = self._getVertexSortedTriangles(df_ref)
+            tri_ref = self._getVertexSortedTriangles(df_ref, fov_deg=limit_ref_triangle_fov)
             tri_tgt = self._getVertexSortedTriangles(df_tgt)
         else:
             tri_ref = self._getTriangles(df_ref)

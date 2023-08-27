@@ -16,8 +16,8 @@ from sklearn.linear_model import LinearRegression
 
 def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float):
   stars = []
-  for star in itertools.islice(skymap.coneSearch(center, fov_deg), 100):
-    if 'mag' in star and star['mag']: #and star['mag'] < 11:
+  for star in itertools.islice(skymap.coneSearch(center, fov_deg), 200):
+    if 'mag' in star and star['mag'] and star['mag'] < 11:
       print(star)
       s_coord = SkyCoord(star['icrs']['deg']['ra'] * u.degree, star['icrs']['deg']['dec'] * u.degree, frame=ICRS)
       x, y = project(s_coord.ra.degree, s_coord.dec.degree, center.ra.degree, center.dec.degree, 0)
@@ -26,7 +26,7 @@ def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float):
   return df_ref
 
 
-def platesolve(imageData: ImageData, df_tgt: pd.DataFrame, center: SkyCoord, fov_deg: float=3.0):
+def platesolve(imageData: ImageData, in_df_tgt: pd.DataFrame, center: SkyCoord, fov_deg: float=5.0):
   with SkyMap() as sm:
     df_ref = cone_search_stardata(sm, center, fov_deg=fov_deg)
 
@@ -37,15 +37,15 @@ def platesolve(imageData: ImageData, df_tgt: pd.DataFrame, center: SkyCoord, fov
   assert(img16.shape[2] == 3)
   img16 = cv2.cvtColor(img16, cv2.COLOR_RGB2GRAY)
   img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
-  numStars = 20
+  numStars = 200
   #img8 = cv2.equalizeHist(img8)
   star_img, df_tgt = StarFinder().find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
 
   matcher = StarMatcher()
   matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
 
-  if df_tgt.votes.sum() < 100 or df_tgt.starno.isnull().sum() < 3:
-    return None
+  if df_tgt.votes.sum() < 15 or df_tgt.starno.isnull().sum() < 3:
+    return in_df_tgt, None
 
   img_stars = df_tgt[~df_tgt.starno.isnull()][['starno','cluster_cx', 'cluster_cy', 'votes']]
   img_ref_stars = df_ref[['id','cluster_cx', 'cluster_cy', 'ra', 'dec']].join(img_stars.set_index('starno'), rsuffix='r', how='right')
@@ -53,7 +53,7 @@ def platesolve(imageData: ImageData, df_tgt: pd.DataFrame, center: SkyCoord, fov
   matched_star_triple = img_ref_stars.sort_values('votes', ascending=False)[:3]
   src = np.array([(row.cluster_cx, row.cluster_cy) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
   dst = np.array([(row.cluster_cxr, row.cluster_cyr) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
-  import cv2
+
   tx = cv2.getAffineTransform(src, dst)
   df_ref[['img_cx', 'img_cy']] = df_ref.apply(lambda r: pd.Series(np.dot(tx, [r.cluster_cx, r.cluster_cy, 1])).astype(np.int32), axis=1)
 
@@ -82,4 +82,4 @@ def platesolve(imageData: ImageData, df_tgt: pd.DataFrame, center: SkyCoord, fov
   for idx, star in df_tgt[~df_tgt.starno.isnull()].iterrows():
     df_tgt.loc[idx, 'name'] = df_ref.loc[star.starno].id
 
-  return pred_center
+  return df_tgt, pred_center

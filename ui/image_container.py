@@ -240,11 +240,6 @@ class ImageViewer(BaseWidget):
         if self.onTargetStarChanged:
            self.onTargetStarChanged(star)
         print(f"Clicked {star}")
-        self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
+        star_name = star['name'] if 'name' in star.columns else ""
+        self.tooltipLabel.configure(text=f"{star_name}\nFWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
         self.tooltipLabel.place(x=x, y=y-20)
-
-  def annotate(self, name, star):
-    sx = int(star['cluster_cx'] * self.scaleX)
-    sy = int(star['cluster_cy'] * self.scaleY)
-    font = ('Helvetica 8 bold')
-    self.imageCanvas.create_text(sx, sy, text=name, font=font, fill="yellow", tags='star_name')
