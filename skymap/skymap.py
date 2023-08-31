@@ -69,7 +69,17 @@ class SkyMap:
     return searchresult
   
   def searchName(self, term):
-    cursor = self.db.stars.find({'_id':{'$regex': re.compile(term, re.IGNORECASE)}}, limit=10)
+    cursor = self.db.stars.find(
+      filter={
+        '_id': {
+            '$regex': term, 
+            '$options': 'i'
+        }
+      },
+      sort=list({
+          'mag': 1
+      }.items()),
+      limit=10)
     return [star for star in cursor]
   
   def coneSearch(self, coord: SkyCoord, fov_deg: float, limit:int=None):
@@ -83,25 +93,31 @@ class SkyMap:
       return self.cache[cache_key]
 
     pipeline = [
-      { '$geoNear': {
-          'near': {
-            'type': 'Point', 
-            'coordinates': [ra, dec]
-          }, 
-          'maxDistance': fov_meters, 
-          'key': 'icrs.location', 
-          'spherical': True, 
-          'distanceField': 'distance'
-      }},
-      { '$match': {
-          '$and': [
-            {'typ': re.compile('star|binary|supernova', re.IGNORECASE)},
-            {'mag': {'$ne': None}}
-          ]
-      }},
-      { '$sort': {
-          'mag': 1
-      }},
+        { '$geoNear': {
+            'near': {
+              'type': 'Point', 
+              'coordinates': [ra, dec]
+            }, 
+            'maxDistance': fov_meters, 
+            'key': 'icrs.location', 
+            'spherical': True, 
+            'distanceField': 'distance'
+        }},
+        { '$match': {
+            'typ': re.compile('star|binary|supernova', re.IGNORECASE)
+        }},
+        { '$project':{
+            'id': 1,
+            'mag': {
+              '$ifNull': ["$mag", 12],
+            },
+            'typ': 1,
+            'ra': "$icrs.deg.ra",
+            'dec': "$icrs.deg.dec",
+        }},
+        { '$sort': {
+            'mag': 1
+        }},
     ]
 
     if limit is not None:
@@ -152,9 +168,9 @@ if __name__ == "__main__":
   with SkyMap() as sm:
     stars = []
     for star in sm.coneSearch(c1, .50):
-      if 'NAME' in star:
+      if True: #'NAME' in star:
         print(star['_id'])
-        s_coord = SkyCoord(star['icrs']['deg']['ra'] * u.degree, star['icrs']['deg']['dec'] * u.degree, frame=ICRS)
+        s_coord = SkyCoord(star['ra'] * u.degree, star['dec'] * u.degree, frame=ICRS)
         stars.append(s_coord)
     fig = plt.figure()
     plt.subplot(projection="aitoff")

@@ -4,12 +4,14 @@ from pathlib import Path
 import re
 
 # Columns: #, identifier, typ, coord1 (ICRS,J2000/2000), coord4 (Gal,J2000/2000), pm, Mag V, spec. type, ang. size, #Dist, distance Q unit, err-, err+, method, reference
-simbad_row_re = re.compile(r"\s*\d+\s*\|\s*(?P<id>.*?)\|\s*(?P<typ>.*?)\|\s*(?P<icrs>.*?)\|\s*(?P<gal>.*?)\|\s*(?P<pm>.*?)\|\s*(?P<mag>.*?)\|\s*(?P<spec>.*?)\|\s*(?P<size>.*?)\|.*?\|\s*(?P<distance>.*?)\|.*$")
-
+#simbad_row_re = re.compile(r"\s*\d+\s*\|\s*(?P<id>.*?)\|\s*(?P<typ>.*?)\|\s*(?P<icrs>.*?)\|\s*(?P<gal>.*?)\|\s*(?P<pm>.*?)\|\s*(?P<mag>.*?)\|\s*(?P<spec>.*?)\|\s*(?P<size>.*?)\|.*?\|\s*(?P<distance>.*?)\|.*$")
 hmsdms_re = re.compile(r"(\d\d)\s(\d\d)\s(\d+\.?\d+)\s+([+|-]\d\d)\s(\d\d)\s(\d+\.?\d+)")
 float_pair_re = re.compile(r"([+|-]?\d+\.?\d*)\s+([+|-]?\d+\.?\d*)")
 ID_re = re.compile(r"([A-Z]+)\s(.*)")
 distance_re = re.compile(r"(\d+\.?\d*)\s+(\w+)")
+
+# Columns: # | identifier | typ | all types | coord1 (ICRS,J2000/2000) | coord2 (ICRS,J2000/2000) | plx | Mag U | Mag B | Mag V | Mag R | Mag I | spec. type 
+simbad_row_re = re.compile(r"\s*\d+\s*\|\s*(?P<id>.*?)\|\s*(?P<typ>.*?)\|\s*(?P<alltyp>.*?)\|\s*(?P<icrs>.*?)\|\s*(?P<icrs2>.*?)\|\s*(?P<plx>.*?)\|\s*(?P<magU>.*?)\|\s*(?P<magB>.*?)\|\s*(?P<magV>.*?)\|\s*(?P<magR>.*?)\|\s*(?P<magI>.*?)\|\s*(?P<spec>.*?)")
 
 def normalize(k, v):
   v = v.strip()
@@ -33,14 +35,16 @@ def normalize(k, v):
         "coordinates": [ra_deg - 180, dec_deg], # convert to RA:(-180 to +180) and DEC:(-90 to +90)
       }
     }
-  elif k == 'gal':
+  elif k == 'icrs2':
     gal_ra, gal_dec = float_pair_re.match(v).groups()
     return {
       "ra": float(gal_ra),
       "dec": float(gal_dec)
     }
-  elif k == 'mag':
-    return float(v)
+  elif k.startswith('mag'):
+    return float(v) if v != '~' else None
+  elif k == 'plx':
+    return float(v) if v != '~' else None
   elif k == 'pm':
     return [float(x) for x in float_pair_re.match(v).groups()]
   elif k == 'size':
@@ -65,12 +69,24 @@ def normalize(k, v):
 if __name__ == "__main__":
 
   objects_in_the_sky = {}
-  for data_file in tqdm((Path(__file__).parent/"simbad_download").glob("*.txt")):
+  for data_file in tqdm((Path(__file__).parent/"s3").glob("*.txt")):
     with data_file.open() as f:
       while r := f.readline():
         if (rowmatch := simbad_row_re.match(r)) is not None:
           obj = {k:normalize(k,v) for k,v in rowmatch.groupdict().items() if k is not None and v is not None}
           obj["_id"] = obj["id"].replace(" ","")
+
+          tm = 0
+          tw = 0
+          for m, w in zip(['magU', 'magB', 'magV', 'magR', 'magI'], [0.1, 0.3, 0.5, 0.3, 0.1]):
+            if obj[m] is None:
+              continue
+            tm += obj[m]*w
+            tw += w
+          if tw == 0:
+            obj["mag"] = None
+          else:
+            obj["mag"] = tm/tw
 
           segs = obj["id"].split("  ")
           for seg in segs:
@@ -86,6 +102,8 @@ if __name__ == "__main__":
   with MongoClient("localhost") as mon:
     db = mon.stars
     db.stars.insert_many(objects_in_the_sky.values(), ordered=False)
-    # Create index  db.stars.createIndex({"icrs.location": "2dsphere"})
-    db.command({"createIndexes": "stars", "indexes": [{"key": {"location": "2dsphere"}}]})
+    # Create index 
+    db.stars.createIndex({"icrs.location": "2dsphere"})
+    db.stars.createIndex({"id": 1})
+    #db.command({"createIndexes": "stars", "indexes": [{"key": {"location": "2dsphere"}}]})
     mon.close()

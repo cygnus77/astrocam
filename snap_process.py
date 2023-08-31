@@ -9,30 +9,7 @@ import time
 import shutil
 import tempfile
 from datetime import datetime
-from astropy.io import fits
-import os
-
-class ImageData:
-    def __init__(self, image, fname, header):
-        self._image = image
-        self._fname = fname
-        self._header = header
-
-    @property
-    def image(self):
-        return self._image
-    @property
-    def fname(self):
-        return self._fname
-    @property
-    def header(self):
-        return self._header
-    
-    def close(self):
-       self._image = None
-       self._fname = None
-       self._header = None
-
+from image_data import ImageData
 
 class ProgressData:
     def __init__(self, progress):

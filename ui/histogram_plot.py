@@ -4,6 +4,7 @@ from PIL import ImageTk, Image
 import numpy as np
 import time
 import cv2
+from image_data import ImageData
 from ui.base_widget import BaseWidget
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -27,12 +28,12 @@ class HistogramViewer(BaseWidget):
     self.canvas = FigureCanvasTkAgg(fig, master=self.histoCanvas)
     self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-  def _update(self, img: np.ndarray):
+  def _update(self, img: ImageData):
     if img is None:
       return
-    red = np.bincount(img[:,:,0].reshape(-1))
-    green = np.bincount(img[:,:,1].reshape(-1))
-    blue = np.bincount(img[:,:,2].reshape(-1))
+    red = np.bincount(img.rgb24[:,:,0].reshape(-1))
+    green = np.bincount(img.rgb24[:,:,1].reshape(-1))
+    blue = np.bincount(img.rgb24[:,:,2].reshape(-1))
 
     x = np.linspace(0, 65535, 5)
     self.ax.set_xticks(x)

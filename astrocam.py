@@ -5,8 +5,8 @@ import tkinter.ttk as ttk
 from datetime import datetime, timedelta
 import time
 from pathlib import Path
-
-from snap_process import ImageData, ProgressData
+from image_data import ImageData
+from snap_process import ProgressData
 
 from multiprocessing import Queue
 import queue
@@ -196,7 +196,10 @@ class AstroCam:
         # Image type
         imagetTypeFrame = ttk.Frame(settingsRow1)
         ttk.Label(imagetTypeFrame, text="Type").pack(side=tk.LEFT)
-        ttk.Combobox(imagetTypeFrame, textvariable=self.image_type, values=["Light", "Dark", "Flat", "Bias"], state='readonly', width=5, font=self.EntryFont).pack(side=tk.LEFT)
+        ttk.Combobox(imagetTypeFrame,
+                     textvariable=self.image_type,
+                     values=["Light", "Dark", "Flat", "Bias"],
+                     state='readonly', width=5, font=self.EntryFont).pack(side=tk.LEFT)
         imagetTypeFrame.pack(side=tk.LEFT, pady=3)
 
         # Gain / ISO
@@ -384,16 +387,14 @@ class AstroCam:
 
             imageData = ImageData(img, output_fname, hdr)
             self.imageViewer.update(imageData)
-            self.histoViewer.update(self.imageViewer.image)
+            self.histoViewer.update(imageData)
             if job['image_type'] == 'Light' and not self.runningLiveView:
-                if self.fwhmWidget.update(self.imageViewer.image):
-                    stars = self.fwhmWidget.stars
+                imageData.computeStars()
+                if self.fwhmWidget.update(imageData):
                     if self.onImageReady:
                         fn = self.onImageReady.pop()
-                        stars = fn(imageData, stars)
-                        self.imageViewer.setStars(stars)
-
-            imageData.close()
+                        fn(imageData)
+                    self.imageViewer.updateStars()
 
         # Start next exposure
         if self.runningLiveView:

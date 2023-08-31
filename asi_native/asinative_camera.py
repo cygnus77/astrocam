@@ -23,7 +23,7 @@ class ASINativeCamera():
       if cameraModel in cam_name:
         id = idx
         break
-    if id == None:
+    if id is None:
       raise ValueError("Camera not found")
 
     self.camera = asi.Camera(id)

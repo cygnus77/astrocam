@@ -10,42 +10,39 @@ from astropy import units as u
 from astropy.coordinates import ICRS
 from skymap.skymap import SkyMap
 from skymap.stardb.render_view import project
-from snap_process import ImageData
+from image_data import ImageData
 import itertools
 from sklearn.linear_model import LinearRegression
 
-def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float):
+
+def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, result_limit: int=1e5, mag_limit:int=15):
   stars = []
-  for star in itertools.islice(skymap.coneSearch(center, fov_deg), 200):
-    if 'mag' in star and star['mag'] and star['mag'] < 11:
+  for star in itertools.islice(skymap.coneSearch(center, fov_deg), result_limit):
+    if 'mag' in star and star['mag'] < mag_limit:
       print(star)
-      s_coord = SkyCoord(star['icrs']['deg']['ra'] * u.degree, star['icrs']['deg']['dec'] * u.degree, frame=ICRS)
+      s_coord = SkyCoord(star['ra'] * u.degree, star['dec'] * u.degree, frame=ICRS)
       x, y = project(s_coord.ra.degree, s_coord.dec.degree, center.ra.degree, center.dec.degree, 0)
-      stars.append({"id": star["_id"], "cluster_cx": x, "cluster_cy": y, "ra": s_coord.ra.degree, "dec": s_coord.dec.degree})
+      stars.append({
+        "id": star["_id"], 
+        "cluster_cx": x, "cluster_cy": y, 
+        "ra": s_coord.ra.degree, "dec": s_coord.dec.degree,
+        "mag": star["mag"]
+      })
   df_ref = pd.DataFrame(stars)
   return df_ref
 
 
-def platesolve(imageData: ImageData, in_df_tgt: pd.DataFrame, center: SkyCoord, fov_deg: float=5.0):
+def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0):
   with SkyMap() as sm:
-    df_ref = cone_search_stardata(sm, center, fov_deg=fov_deg)
+    df_ref = cone_search_stardata(sm, center, fov_deg=fov_deg, result_limit=1000, mag_limit=11)
 
-  img16 = debayer_superpixel(imageData.image)
-
-  assert(img16.dtype == np.uint16)
-  assert(len(img16.shape) == 3)
-  assert(img16.shape[2] == 3)
-  img16 = cv2.cvtColor(img16, cv2.COLOR_RGB2GRAY)
-  img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
-  numStars = 200
-  #img8 = cv2.equalizeHist(img8)
-  star_img, df_tgt = StarFinder().find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
+  df_tgt = imageData.stars
 
   matcher = StarMatcher()
-  matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
+  matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.7)
 
-  if df_tgt.votes.sum() < 15 or df_tgt.starno.isnull().sum() < 3:
-    return in_df_tgt, None
+  if df_tgt.votes.sum() < 10 or df_tgt.starno.isnull().sum() < 3:
+    return None
 
   img_stars = df_tgt[~df_tgt.starno.isnull()][['starno','cluster_cx', 'cluster_cy', 'votes']]
   img_ref_stars = df_ref[['id','cluster_cx', 'cluster_cy', 'ra', 'dec']].join(img_stars.set_index('starno'), rsuffix='r', how='right')
@@ -69,11 +66,10 @@ def platesolve(imageData: ImageData, in_df_tgt: pd.DataFrame, center: SkyCoord, 
       return None
   df_tgt['starno'] = df_tgt.apply(reassign, axis=1)
 
-
   X = df_ref[['img_cx', 'img_cy']]
   y = df_ref[['ra', 'dec']]
   reg = LinearRegression().fit(X, y)
-  pred_center = reg.predict([[img8.shape[1]//2, img8.shape[0]//2]])[0]
+  pred_center = reg.predict([[imageData.rgb24.shape[1]//2, imageData.rgb24.shape[0]//2]])[0]
   pred_center = SkyCoord(pred_center[0] * u.degree, pred_center[1] * u.degree, frame=ICRS)
   print(f"Image Center RA,DEC: {pred_center}")
   print(f"Separation from target: {center.separation(pred_center).arcminute}")
@@ -82,4 +78,4 @@ def platesolve(imageData: ImageData, in_df_tgt: pd.DataFrame, center: SkyCoord, 
   for idx, star in df_tgt[~df_tgt.starno.isnull()].iterrows():
     df_tgt.loc[idx, 'name'] = df_ref.loc[star.starno].id
 
-  return df_tgt, pred_center
+  return pred_center

@@ -2,8 +2,7 @@ from datetime import datetime
 import tkinter as tk
 import tkinter.ttk as ttk
 import numpy as np
-from fwhm.star_finder import StarFinder
-from fwhm.star_matcher import StarMatcher
+from image_data import ImageData
 from ui.base_widget import BaseWidget
 import pandas as pd
 import cv2
@@ -16,8 +15,6 @@ class FWHMWidget(BaseWidget):
 
   def __init__(self, parentFrame):
     super().__init__(parentFrame, "FWHM")
-    self.starFinder = StarFinder()
-    self.starMatcher = StarMatcher()
 
     # Canvas for fwhm plot
     tk_canvas = tk.Canvas(self.widgetFrame, width=250, height=250, background="#200")
@@ -49,26 +46,20 @@ class FWHMWidget(BaseWidget):
 
   def reset(self):
     self.fwhm_data = []
-    self.stars = []
     self.targetStar = []
     self.render_fwhm_plot()
 
-  def _update(self, img16: np.ndarray):
-    assert(img16.dtype == np.uint16)
-    assert(len(img16.shape) == 3)
-    assert(img16.shape[2] == 3)
-    img16 = cv2.cvtColor(img16, cv2.COLOR_RGB2GRAY)
-    img8 = ((img16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
-    numStars = 20
-    star_img, df = self.starFinder.find_stars(img8=np.squeeze(img8), img16=np.squeeze(img16), topk=numStars)
+  def _update(self, imageData: ImageData):
+    if imageData.stars is None:
+      return
+    df = imageData.stars
     fwhm = {
-      "numstars": len(df),
+      "numstars": len(imageData.stars),
       "fwhm_x": df.fwhm_x.mean(),
       "fwhm_y":df.fwhm_y.mean(),
       "fwhm_ave":((df.fwhm_x + df.fwhm_y)/2).mean()}
     self.fwhm_data.append(fwhm)
     self.render_fwhm_plot()
-    self.stars = df
 
     if self.targetStar:
       s =  self.targetStar[-1][1]

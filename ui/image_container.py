@@ -9,7 +9,7 @@ import numpy as np
 from debayer.bilinear import debayer_bilinear
 from debayer.superpixel import debayer_superpixel
 import pandas as pd
-from snap_process import ImageData
+from image_data import ImageData
 from ui.base_widget import BaseWidget
 
 class ImageViewer(BaseWidget):
@@ -20,7 +20,6 @@ class ImageViewer(BaseWidget):
     self.imageScale = 1.0
     self.highlights = None
     self.scaledImg = None
-    self.stars = None
     self.starHotSpots = {}
     self.onTargetStarChanged = None
 
@@ -72,7 +71,7 @@ class ImageViewer(BaseWidget):
       return
     imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
     print(imgCanvasWidth, imgCanvasHeight)
-    imgAspect = self.image.shape[0] / self.image.shape[1]
+    imgAspect = self.image.rgb24.shape[0] / self.image.rgb24.shape[1]
 
     if imgCanvasWidth * imgAspect <= imgCanvasHeight:
       w = imgCanvasWidth
@@ -80,10 +79,10 @@ class ImageViewer(BaseWidget):
     else:
       w = int(imgCanvasHeight / imgAspect)
       h = imgCanvasHeight
-    self.scaleX = (w*self.imageScale) / self.image.shape[1]
-    self.scaleY = (h*self.imageScale) / self.image.shape[0]
-    
-    scaledImg = cv2.resize(self.image, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
+    self.scaleX = (w*self.imageScale) / self.image.rgb24.shape[1]
+    self.scaleY = (h*self.imageScale) / self.image.rgb24.shape[0]
+
+    scaledImg = cv2.resize(self.image.rgb24, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
     if scaledImg.dtype == np.uint16:
       scaledImg = (scaledImg / 256).astype(np.uint8)
     self.scaledImg = scaledImg
@@ -128,7 +127,7 @@ class ImageViewer(BaseWidget):
       self.imageScale += 0.5
       self._scaleImage()
       self._refreshDisplay()
-      self.setStars(self.stars)
+      self.updateStars()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def zoomout(self):
@@ -136,81 +135,26 @@ class ImageViewer(BaseWidget):
       self.imageScale -= 0.5
       self._scaleImage()
       self._refreshDisplay()
-      self.setStars(self.stars)
+      self.updateStars()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
       
   def resize(self, event):
     self._scaleImage()
     self._refreshDisplay()
-    self.setStars(self.stars)
+    self.updateStars()
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def _update(self, imgData: ImageData):
-    start_time = time.time_ns()
-    if imgData.image is None:
-        ext = imgData.fname[-3:].lower()
-        if ext == 'nef':
-            raw = rawpy.imread(imgData.fname)
-            print(f"Postprocessing {imgData.fname}")
-            params = rawpy.Params(demosaic_algorithm = rawpy.DemosaicAlgorithm.AHD,
-                half_size = False,
-                four_color_rgb = False,
-                fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Off,
-                use_camera_wb=True,
-                use_auto_wb=False,
-                #output_color=rawpy.ColorSpace.raw, 
-                #output_bps = 8,
-                user_flip = 0,
-                no_auto_scale = False,
-                no_auto_bright=True
-                #highlight_mode= rawpy.HighlightMode.Clip
-                )
 
-            end_load_time = time.time_ns()
-
-            img = raw.postprocess(params=params)
-            raw.close()
-
-        elif ext == 'fit':
-            f = fits.open(imgData.fname)
-            ph = f[0]
-            img = ph.data
-
-            end_load_time = time.time_ns()
-            load_time = end_load_time - start_time
-
-            if ph.header['BAYERPAT'] == 'RGGB':
-                deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
-                img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
-                img = (img * 255).astype(np.uint8)
-            else:
-                raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
-    else:
-        if imgData.image is not None:
-            img = imgData.image
-            end_load_time = start_time
-            load_time = 0
-            if imgData.header['BAYERPAT'] == 'RGGB':
-                img = debayer_superpixel(img)
-            else:
-                raise NotImplementedError(f"Unsupported bayer pattern: {imgData.header['BAYERPAT']}")
-            deb_finish_time = time.time_ns()
-            deb_time = deb_finish_time - end_load_time
-
-    self.image = img
-    print(f"load_time: {load_time/1e9:0.3f}, deb_time: {deb_time/1e9:0.3f}")
-
-    self.stars = None
+    self.image = imgData
     self._scaleImage()
     self._refreshDisplay()
     return True
 
-  def setStars(self, stars: pd.DataFrame):
-    self.stars = stars
+  def updateStars(self):
     self.imageCanvas.delete('star_bbox')
-    self.imageCanvas.delete('star_name')
     self.starHotSpots = {}
-    if self.stars is None:
+    if self.image is None or self.image.stars is None:
        return
 
     def show_tooltip(event, itemid, star):
@@ -218,7 +162,7 @@ class ImageViewer(BaseWidget):
       self.tooltipLabel.configure(text=f"FWHM: {star.fwhm_x}, {star.fwhm_y}")
       self.tooltipLabel.place(x=x, y=y-20)
 
-    for idx, star in self.stars.iterrows():
+    for idx, star in self.image.stars.iterrows():
       sx = int(star['cluster_cx'] * self.scaleX)
       sy = int(star['cluster_cy'] * self.scaleY)
       itemid = self.imageCanvas.create_oval(sx-5, sy-5, sx+5, sy+5, outline="red", tags='star_bbox')
@@ -240,6 +184,6 @@ class ImageViewer(BaseWidget):
         if self.onTargetStarChanged:
            self.onTargetStarChanged(star)
         print(f"Clicked {star}")
-        star_name = star['name'] if 'name' in star.columns else ""
+        star_name = star['name'] if ('name' in star.index and star['name']) else ""
         self.tooltipLabel.configure(text=f"{star_name}\nFWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
         self.tooltipLabel.place(x=x, y=y-20)
