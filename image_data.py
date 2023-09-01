@@ -15,6 +15,7 @@ class ImageData:
         self._gray16 = None
         self._gray8 = None
         self._stars = None
+        self._star_img = None
 
     def close(self):
         self._raw = None
@@ -25,6 +26,7 @@ class ImageData:
         self._gray16 = None
         self._gray8 = None
         self._stars = None
+        self._star_img = None
 
     @property
     def fname(self):
@@ -125,4 +127,8 @@ class ImageData:
         self.starFinder = StarFinder()
         self.starMatcher = StarMatcher()
         numStars = 20
-        self.star_img, self.stars = self.starFinder.find_stars(img8=np.squeeze(self.gray8), img16=np.squeeze(self.gray16), topk=numStars)
+        self._star_img, self._stars = self.starFinder.find_stars(img8=np.squeeze(self.gray8), img16=np.squeeze(self.gray16), topk=numStars)
+
+    @property
+    def stars(self):
+        return self._stars

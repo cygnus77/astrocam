@@ -22,19 +22,21 @@ class ImageViewer(BaseWidget):
     self.scaledImg = None
     self.starHotSpots = {}
     self.onTargetStarChanged = None
+    self.stretchLow = 0
+    self.stretchHigh = 255
 
     # Image container
     self.imageCanvas = tk.Canvas(self.widgetFrame, background="#200")
     self.image_container = None
     self.crosshairs = None
     self.tooltipLabel = tk.Label(self.imageCanvas, background="#FFFFDD", relief="solid", borderwidth=1)
-    hbar=ttk.Scrollbar(self.widgetFrame, orient=tk.HORIZONTAL)
-    hbar.pack(side=tk.BOTTOM, fill=tk.X)
-    hbar.config(command=self.imageCanvas.xview)
-    vbar=ttk.Scrollbar(self.widgetFrame, orient=tk.VERTICAL)
-    vbar.pack(side=tk.RIGHT, fill=tk.Y)
-    vbar.config(command=self.imageCanvas.yview)
-    self.imageCanvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+    self.hbar=ttk.Scrollbar(self.widgetFrame, orient=tk.HORIZONTAL)
+    self.hbar.pack(side=tk.BOTTOM, fill=tk.X)
+    self.hbar.config(command=self.imageCanvas.xview)
+    self.vbar=ttk.Scrollbar(self.widgetFrame, orient=tk.VERTICAL)
+    self.vbar.pack(side=tk.RIGHT, fill=tk.Y)
+    self.vbar.config(command=self.imageCanvas.yview)
+    self.imageCanvas.config(xscrollcommand=self.hbar.set, yscrollcommand=self.vbar.set)
     self.imageCanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     # Bind the mouse click event to the canvas
     self.imageCanvas.bind("<Button-1>", self._onMouseClick)
@@ -61,6 +63,17 @@ class ImageViewer(BaseWidget):
     self.gamma_table = np.array([((i / 255.0) ** invGamma) * 255
       for i in np.arange(0, 256)]).astype("uint8")
     self.gammaStr.set(f"{self.gamma.get():.1f}")
+
+  def stretch(self, a1, a2):
+    self.gamma.set(1.0)
+    self.gammaStr.set("1.0")
+    high = max(a1, a2)
+    low = min(a1, a2)
+    self.gamma_table = np.zeros((256), dtype=np.uint8)
+    self.gamma_table[:low] = 0
+    self.gamma_table[high:] = 255
+    self.gamma_table[low:high] = np.linspace(0, 255, high-low).astype(np.uint8)
+    self._refreshDisplay()
 
   def onGammaChange(self, ev):
     self.updateGammaTable()
@@ -174,7 +187,7 @@ class ImageViewer(BaseWidget):
   def _onMouseClick(self, event):
     if len(self.starHotSpots) == 0:
        return
-    x, y = event.x, event.y
+    x, y = event.x + self.hbar.get(), event.y + self.vbar.get()
     # Perform hit test on ovals
     overlapping_items = self.imageCanvas.find_closest(x, y, 5, max(self.starHotSpots.keys())+1)
     # Check if any oval was hit

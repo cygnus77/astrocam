@@ -95,6 +95,7 @@ class AstroCam:
         self.root.style.configure("Vertical.TScrollbar", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
         self.root.style.configure("Horizontal.TScrollbar", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
         self.root.style.configure("X.TButton", padding=0, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
+        self.root.style.configure("Horizontal.TSlider", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
 
         self.root.style.map("Vertical.TScrollbar",
             background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
@@ -119,7 +120,7 @@ class AstroCam:
 
         # Histogram
         histoFrame=tk.Frame(scrollableControlPanelFrame, bg='black')
-        self.histoViewer = HistogramViewer(histoFrame)
+        self.histoViewer = HistogramViewer(histoFrame, image_container=self.imageViewer)
         histoFrame.pack(fill=tk.X, side=tk.TOP, pady=3)
 
         # On / Off Button
