@@ -99,8 +99,9 @@ class MountStatusWidget(BaseWidget):
         if view_center is None:
             print("No solution")
             return
+        
         print(view_center)
-        self.device.syncto(view_center)
+        # self.device.syncto(view_center)
 
     def _refine(self):
         self.astrocam.onImageReady.append(self._refine_callback)

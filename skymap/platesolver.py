@@ -42,6 +42,7 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0):
   matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.7)
 
   if df_tgt.votes.sum() < 10 or df_tgt.starno.isnull().sum() < 3:
+    print(f"Solver votes: {df_tgt.votes.sum()}; matches: {df_tgt.starno.isnull().sum()} stars")
     return None
 
   img_stars = df_tgt[~df_tgt.starno.isnull()][['starno','cluster_cx', 'cluster_cy', 'votes']]
