@@ -95,17 +95,50 @@ class MountStatusWidget(BaseWidget):
         return
 
     def _refine_callback(self, imageData: ImageData):
-        view_center = PS.platesolve(imageData, self.device.coordinates)
-        if view_center is None:
+        solver_result = PS.platesolve(imageData, self.device.coordinates)
+        if solver_result is None:
             print("No solution")
             return
-        
-        print(view_center)
-        # self.device.syncto(view_center)
+        dlg = RefineConfirm(self, solver_result, self.device)
+        dlg.wait_window()
 
     def _refine(self):
         self.astrocam.onImageReady.append(self._refine_callback)
         self.astrocam.takeSnapshot()
+
+
+class RefineConfirm(tk.Toplevel):
+    def __init__(self, parent, solver_result, device) -> None:
+        super().__init__(parent.widgetFrame.winfo_toplevel())
+        # set background color of window to bgcolor
+        self.configure(bg="#200")
+
+        # set window size to 500x300
+        self.geometry("500x500")
+        dialog_frame = ttk.Frame(self, padding=10, relief=tk.RAISED, borderwidth=2)
+
+        # Table
+        results_frame = ttk.Frame(dialog_frame)
+        self.table = ttk.Treeview(results_frame, columns=('Result', 'Info'), show='headings')
+        self.table.heading('Result', text='Result')
+        self.table.heading('Info', text='Info')
+        self.table.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        results_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Insert the new results into the table
+        for idx, result_key in enumerate(['solved', 'separation_arcmin', 'num_ref', 'num_tgt', 'solver_votes', 'matches', 'center', 'tx']):
+            self.table.insert('', 'end', text=str(idx), values=(result_key, solver_result[result_key]))
+
+        if solver_result['solved']:
+            def syncandclose():
+                device.syncto(solver_result['center'])
+                self.destroy()
+
+            # Select Button
+            select_button = ttk.Button(dialog_frame, text="Sync", command=syncandclose)
+            select_button.pack(side=tk.BOTTOM)
+
+        dialog_frame.pack(fill=tk.BOTH, expand=True)
 
 
 class GotoObjectSelector(tk.Toplevel):

@@ -187,7 +187,9 @@ class ImageViewer(BaseWidget):
   def _onMouseClick(self, event):
     if len(self.starHotSpots) == 0:
        return
-    x, y = event.x + self.hbar.get(), event.y + self.vbar.get()
+    h, w = self.scaledImg.shape[:2]
+    x = event.x + (w * self.hbar.get()[0])
+    y = event.y + (h * self.vbar.get()[0])
     # Perform hit test on ovals
     overlapping_items = self.imageCanvas.find_closest(x, y, 5, max(self.starHotSpots.keys())+1)
     # Check if any oval was hit
@@ -199,4 +201,4 @@ class ImageViewer(BaseWidget):
         print(f"Clicked {star}")
         star_name = star['name'] if ('name' in star.index and star['name']) else ""
         self.tooltipLabel.configure(text=f"{star_name}\nFWHM: {star.fwhm_x:.1f}, {star.fwhm_y:.1f}")
-        self.tooltipLabel.place(x=x, y=y-20)
+        self.tooltipLabel.place(x=event.x, y=event.y-20)

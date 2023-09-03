@@ -6,7 +6,7 @@ class SimulatedMount():
     
     def __init__(self) -> None:
         # 14 15 39.67207	+19 10 56.6730
-        self._coordinates = SkyCoord("14h15m39.67s +19d10m56.67s", frame=ICRS)
+        self._coordinates = SkyCoord(19.511958471313946 * u.hour, 27.959680083333325 * u.deg, frame=ICRS)
         self._site = SkyCoord(Longitude([-74, 20, 42], unit=u.deg),
                               Latitude([40, 51, 55], unit=u.deg),
                               frame=ICRS)

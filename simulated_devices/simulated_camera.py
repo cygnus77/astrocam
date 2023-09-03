@@ -154,6 +154,7 @@ class SimulatedCamera():
 
     def downloadimage(self):
         fname = self.files[self._idx % len(self.files)]
+        print(fname)
         self._idx += 1
         with fits.open(fname) as f:
             ph = f[0]

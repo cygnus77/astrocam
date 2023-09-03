@@ -15,11 +15,10 @@ import itertools
 from sklearn.linear_model import LinearRegression
 
 
-def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, result_limit: int=1e5, mag_limit:int=15):
+def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, mag_limit:int):
   stars = []
-  for star in itertools.islice(skymap.coneSearch(center, fov_deg), result_limit):
-    if 'mag' in star and star['mag'] < mag_limit:
-      print(star)
+  for star in skymap.coneSearch(center, fov_deg):
+    if 'mag' in star and star['mag'] < 11:
       s_coord = SkyCoord(star['ra'] * u.degree, star['dec'] * u.degree, frame=ICRS)
       x, y = project(s_coord.ra.degree, s_coord.dec.degree, center.ra.degree, center.dec.degree, 0)
       stars.append({
@@ -32,27 +31,38 @@ def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, resul
   return df_ref
 
 
-def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0):
+def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_limit: float=11.0):
+  result = {
+    'solved': False
+  }
+
   with SkyMap() as sm:
-    df_ref = cone_search_stardata(sm, center, fov_deg=fov_deg, result_limit=1000, mag_limit=11)
+    df_ref = cone_search_stardata(sm, center, fov_deg=fov_deg, mag_limit=mag_limit)
 
   df_tgt = imageData.stars
-
+  # print(f"Num ref stars: {len(df_ref)}, Num tgt stars: {len(df_tgt)}")
+  result['num_ref'] = len(df_ref)
+  result['num_tgt'] = len(df_tgt)
   matcher = StarMatcher()
-  matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.7)
+  matcher_result = matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
+  result.update(matcher_result)
 
-  if df_tgt.votes.sum() < 10 or df_tgt.starno.isnull().sum() < 3:
-    print(f"Solver votes: {df_tgt.votes.sum()}; matches: {df_tgt.starno.isnull().sum()} stars")
-    return None
+  # print(f"Solver votes: {df_tgt.votes.sum()}; matches: {(~df_tgt.starno.isnull()).sum()} stars")
+  result['solver_votes'] = df_tgt.votes.sum()
+  result['matches'] = (~df_tgt.starno.isnull()).sum()
 
   img_stars = df_tgt[~df_tgt.starno.isnull()][['starno','cluster_cx', 'cluster_cy', 'votes']]
   img_ref_stars = df_ref[['id','cluster_cx', 'cluster_cy', 'ra', 'dec']].join(img_stars.set_index('starno'), rsuffix='r', how='right')
+
+  if len(img_ref_stars) < 3:
+    return result
 
   matched_star_triple = img_ref_stars.sort_values('votes', ascending=False)[:3]
   src = np.array([(row.cluster_cx, row.cluster_cy) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
   dst = np.array([(row.cluster_cxr, row.cluster_cyr) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
 
   tx = cv2.getAffineTransform(src, dst)
+  result['tx'] = tx
   df_ref[['img_cx', 'img_cy']] = df_ref.apply(lambda r: pd.Series(np.dot(tx, [r.cluster_cx, r.cluster_cy, 1])).astype(np.int32), axis=1)
 
   # Reassign stars
@@ -70,13 +80,21 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0):
   X = df_ref[['img_cx', 'img_cy']]
   y = df_ref[['ra', 'dec']]
   reg = LinearRegression().fit(X, y)
-  pred_center = reg.predict([[imageData.rgb24.shape[1]//2, imageData.rgb24.shape[0]//2]])[0]
+  pred_center = reg.predict(pd.DataFrame([{"img_cx": imageData.rgb24.shape[1]//2, "img_cy": imageData.rgb24.shape[0]//2}]))[0]
   pred_center = SkyCoord(pred_center[0] * u.degree, pred_center[1] * u.degree, frame=ICRS)
-  print(f"Image Center RA,DEC: {pred_center}")
-  print(f"Separation from target: {center.separation(pred_center).arcminute}")
+  separation_arcmin = center.separation(pred_center).arcminute
+  result['center'] = pred_center
+  result['separation_arcmin'] = separation_arcmin
+  # print(f"Image Center RA,DEC: {pred_center}")
+  # print(f"Separation from target: {center.separation(pred_center).arcminute}")
+
+  if center.separation(pred_center).arcminute > 20:
+    return result
+  
+  result['solved'] = True
 
   df_tgt['name'] = None
   for idx, star in df_tgt[~df_tgt.starno.isnull()].iterrows():
     df_tgt.loc[idx, 'name'] = df_ref.loc[star.starno].id
 
-  return pred_center
+  return result

@@ -21,20 +21,30 @@ class StarMatcher:
             Returns votes and voting pairs for informational purposes
             Code developed in refine_location.ipynb
         """
+        result = {
+            'vertex_sorted': vertex_sorted,
+            'down_votes': down_votes,
+            'absolute_similar': absolute_similar,
+            'vote_with_conf': vote_with_conf,
+            'limit_ref_triangle_fov': limit_ref_triangle_fov
+        }
 
         if vertex_sorted:
             # tri_ref = self._getVertexSortedTriangles(df_ref, combinations(df_ref.index, 3), fov_deg=limit_ref_triangle_fov)
             tri_ref = pd.DataFrame(self._getVertexSortedDelaunayTriangles(df_ref, fov_deg=limit_ref_triangle_fov))
-            tri_tgt = pd.DataFrame(self._getVertexSortedTriangles(df_tgt, combinations(df_tgt.index, 3), cache_distances=True))
+            tri_tgt = pd.DataFrame(self._getVertexSortedTriangles(df_tgt, combinations(df_tgt.index, 3), fov_deg=None))
         else:
             tri_ref = self._getTriangles(df_ref)
             tri_tgt = self._getTriangles(df_tgt)
+
+        # print(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
+        result['ref_triangles'] = len(tri_ref)
+        result['tgt_triangles'] = len(tri_tgt)
 
         for TRIANGLETOLERANCE in [
                 1e-5, 5e-5, 1e-4, 2e-4,
                 3e-4, 5e-4, 7e-4, 1e-3,
                 2e-3, 5e-3, 7e-3, 1e-2]:
-
             votes = np.zeros((len(df_ref)+1, len(df_tgt)+1), dtype=np.float32)
 
             for tgt in tri_tgt.itertuples():
@@ -79,18 +89,21 @@ class StarMatcher:
                         # expect unordered star indices s1, s2, s3
                         for a,b in product([ref.s1, ref.s2, ref.s3], [tgt.s1, tgt.s2, tgt.s3]):
                             votes[int(a), b] += upvote
-                
             if np.sum(votes) > 10:
                 break
-
+            
         # print(f"TRIANGLETOLERANCE: {TRIANGLETOLERANCE}")
         # print(f"Total triangle comparisons: {len(tri_ref) * len(tri_tgt)}")
         # print(f"Total votes: {np.sum(votes)}, hit-ratio: {np.sum(votes) / (len(tri_ref) * len(tri_tgt))}")
+        result["triangle_tolerance"] = TRIANGLETOLERANCE
+        result["triangle_comparisons"] = len(tri_ref) * len(tri_tgt)
+        result["total_votes"] = np.sum(votes)
+        result["hit_ratio"] = np.sum(votes) / (len(tri_ref) * len(tri_tgt))
 
         # Produce sorted list of star pairs with highest votes
         vVotingPairs = np.column_stack(np.unravel_index(np.argsort(votes, axis=None), shape=votes.shape))[::-1]
 
-        cutoff = votes.max() / 2
+        cutoff = votes.max() / 4
         # print(f"Vote cutoff threshold: {cutoff}")
         topVotePairs = list(filter(lambda r: votes[r[0],r[1]] > cutoff, vVotingPairs))
 
@@ -108,7 +121,10 @@ class StarMatcher:
             df_tgt.loc[m2, 'starno'] = m1
             df_tgt.loc[m2, 'votes'] = votes[m1, m2]
 
-        return votes, vVotingPairs
+        result['votes'] = votes
+        result['vVotingPairs'] = vVotingPairs
+
+        return result
 
     def _getTriangles(self, df):
         """ Return pair of side-ratios for each triangle formed by permutations of stars
