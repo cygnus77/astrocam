@@ -64,27 +64,27 @@ class ImageData:
                 raw.close()
 
             elif ext == 'fit':
-                f = fits.open(self.fname)
-                ph = f[0]
-                img = ph.data
+                with fits.open(self.fname) as f:
+                    ph = f[0]
+                    img = ph.data
 
-                if ph.header['BAYERPAT'] == 'RGGB':
-                    self._raw = img
-                    deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2RGB)
-                    if self._raw.dtype == np.uint16:
-                        self._deb16 = deb
-                    img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
-                    img = (img * 255).astype(np.uint8)
-                    self._rgb24 = img
-                else:
-                    raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
+                    if ph.header['BAYERPAT'] == 'RGGB':
+                        self._raw = img
+                        deb = cv2.cvtColor(img, cv2.COLOR_BAYER_BG2BGR)
+                        if self._raw.dtype == np.uint16:
+                            self._deb16 = deb
+                        img = deb.astype(np.float32) / np.iinfo(deb.dtype).max
+                        img = (img * 255).astype(np.uint8)
+                        self._rgb24 = img
+                    else:
+                        raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
 
         return self._raw
 
     @property
     def rgb24(self):
         if self._rgb24 is None:
-            deb = cv2.cvtColor(self.raw, cv2.COLOR_BAYER_BG2RGB)
+            deb = cv2.cvtColor(self.raw, cv2.COLOR_BAYER_BG2BGR)
             if self.raw.dtype == np.uint16:
                 self._deb16 = deb
 
