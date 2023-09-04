@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING, GEOSPHERE, TEXT
 from tqdm import tqdm
 from pathlib import Path
 import re
@@ -65,8 +65,25 @@ def normalize(k, v):
     return None
   return v
 
+star_terms = [
+  "star",
+  "supergiant",
+  "binary",
+  "dwarf",
+  "variable",
+  "classical nova",
+  "wolf-rayet",
+  "supernova"
+]
 
-if __name__ == "__main__":
+def is_star(typ):
+  tl = typ.lower()
+  for x in star_terms:
+    if x in tl:
+      return True
+  return False
+
+def load_data():
 
   objects_in_the_sky = {}
   for data_file in tqdm((Path(__file__).parent/"s3").glob("*.txt")):
@@ -75,6 +92,7 @@ if __name__ == "__main__":
         if (rowmatch := simbad_row_re.match(r)) is not None:
           obj = {k:normalize(k,v) for k,v in rowmatch.groupdict().items() if k is not None and v is not None}
           obj["_id"] = obj["id"].replace(" ","")
+          obj["star"] = is_star(obj["typ"])
 
           tm = 0
           tw = 0
@@ -102,15 +120,12 @@ if __name__ == "__main__":
   with MongoClient("localhost") as mon:
     db = mon.stars
     db.stars.insert_many(objects_in_the_sky.values(), ordered=False)
-    # Create index
-    # db.stars.createIndex({"id": 1})
-    # db.stars.createIndex({"mag": 1})
-    # db.stars.createIndex({"icrs.location": "2dsphere"})
-    db.command({"createIndexes": "stars",
-                "indexes": [
-                  {"key": {"icrs.location": "2dsphere"}},
-                  {"key": {"mag": "1"}},
-                  {"key": {"_id": "1"}},
-                ]
-              })
+    db.stars.create_index([("_id", TEXT)])
+    db.stars.create_index([("mag", ASCENDING)])
+    db.stars.create_index([("star", ASCENDING)])
+    db.stars.create_index([("icrs.location", GEOSPHERE)])
     mon.close()
+
+
+if __name__ == "__main__":
+  load_data()

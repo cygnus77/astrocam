@@ -72,15 +72,17 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_l
     x = df_ref.apply(lambda r: pd.Series([dist(t.cluster_cx, t.cluster_cy, r.img_cx, r.img_cy)]), axis=1)[0]
     m = x.min()
     if m < 25:
-      return x.argmin()
+      idx = x.argmin()
+      return pd.Series([idx, df_ref.iloc[idx].ra, df_ref.iloc[idx].dec])
     else:
-      return None
-  df_tgt['starno'] = df_tgt.apply(reassign, axis=1)
+      return None, None, None
+  df_tgt[['starno', 'ra', 'dec']] = df_tgt.apply(reassign, axis=1)
 
-  X = df_ref[['img_cx', 'img_cy']]
-  y = df_ref[['ra', 'dec']]
+  nonantgt = df_tgt[ (~df_tgt.ra.isna()) & (~df_tgt.dec.isna())]
+  X = nonantgt[['cluster_cx', 'cluster_cy']]
+  y = nonantgt[['ra', 'dec']]
   reg = LinearRegression().fit(X, y)
-  pred_center = reg.predict(pd.DataFrame([{"img_cx": imageData.rgb24.shape[1]//2, "img_cy": imageData.rgb24.shape[0]//2}]))[0]
+  pred_center = reg.predict(pd.DataFrame([{"cluster_cx": imageData.rgb24.shape[1]//2, "cluster_cy": imageData.rgb24.shape[0]//2}]))[0]
   pred_center = SkyCoord(pred_center[0] * u.degree, pred_center[1] * u.degree, frame=ICRS)
   separation_arcmin = center.separation(pred_center).arcminute
   result['center'] = pred_center

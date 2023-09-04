@@ -104,12 +104,12 @@ class SkyMap:
             'distanceField': 'distance'
         }},
         { '$match': {
-            'typ': re.compile('star|binary|supernova', re.IGNORECASE)
+            'star': True
         }},
         { '$project':{
             'id': 1,
             'mag': {
-              '$ifNull': ["$mag", 12],
+              '$ifNull': ["$mag", 16],
             },
             'typ': 1,
             'ra': "$icrs.deg.ra",

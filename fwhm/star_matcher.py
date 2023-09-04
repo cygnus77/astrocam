@@ -42,9 +42,10 @@ class StarMatcher:
         result['tgt_triangles'] = len(tri_tgt)
 
         for TRIANGLETOLERANCE in [
-                1e-5, 5e-5, 1e-4, 2e-4,
-                3e-4, 5e-4, 7e-4, 1e-3,
-                2e-3, 5e-3, 7e-3, 1e-2]:
+                # 1e-5, 5e-5, 1e-4, 2e-4,
+                # 3e-4, 5e-4, 7e-4, 1e-3,
+                # 2e-3,
+                5e-3, 7e-3, 1e-2]:
             votes = np.zeros((len(df_ref)+1, len(df_tgt)+1), dtype=np.float32)
 
             for tgt in tri_tgt.itertuples():
