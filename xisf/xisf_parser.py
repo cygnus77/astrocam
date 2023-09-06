@@ -45,7 +45,8 @@ def read_xisf(fname: str) -> np.ndarray:
 
     # Image dimensions
     width, height, channels = map(int, image.attrib['geometry'].split(':'))
-    if (m:=re.match(r'attachment:(\d+):(\d+)', image.attrib['location'])) is None:
+    m = re.match(r'attachment:(\d+):(\d+)', image.attrib['location'])
+    if m is None:
       raise ValueError(f"Unexpected header parameter {image.attrib['location']}")
 
     # Image data pointer

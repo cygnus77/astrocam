@@ -9,6 +9,7 @@ import time
 import shutil
 import tempfile
 from datetime import datetime
+from astropy.io import fits
 from image_data import ImageData
 
 class ProgressData:

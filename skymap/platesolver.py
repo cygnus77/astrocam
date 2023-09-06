@@ -15,7 +15,7 @@ import itertools
 from sklearn.linear_model import LinearRegression
 
 
-def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, mag_limit:int):
+def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, mag_limit: float):
   stars = []
   for star in skymap.coneSearch(center, fov_deg):
     if 'mag' in star and star['mag'] < 11:

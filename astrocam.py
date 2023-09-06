@@ -536,9 +536,12 @@ class AstroCam:
                 self.runStatus.set("Unable to connect")
                 return
 
+    @staticmethod
+    def run():
+        destDir = Path(".\images")
+        destDir.mkdir(exist_ok=True)
+        astroCam = AstroCam(destDir)
+        astroCam.root.mainloop()
+
 if __name__ == "__main__":
-    destDir = Path(".\images")
-    destDir.mkdir(exist_ok=True)
-  
-    astroCam = AstroCam(destDir)
-    astroCam.root.mainloop()
+    AstroCam.run()
