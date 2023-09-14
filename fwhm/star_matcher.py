@@ -41,57 +41,61 @@ class StarMatcher:
         result['ref_triangles'] = len(tri_ref)
         result['tgt_triangles'] = len(tri_tgt)
 
-        for TRIANGLETOLERANCE in [
-                # 1e-5, 5e-5, 1e-4, 2e-4,
-                # 3e-4, 5e-4, 7e-4, 1e-3,
-                # 2e-3,
-                5e-3, 7e-3, 1e-2]:
-            votes = np.zeros((len(df_ref)+1, len(df_tgt)+1), dtype=np.float32)
+        tri_comp = len(tri_ref) * len(tri_tgt)
+        TRIANGLETOLERANCE = 5000 / tri_comp
+        # if tri_comp > 3e6:
+        #     TRIANGLETOLERANCE = 1e-4
+        # elif tri_comp > 1e6:
+        #     TRIANGLETOLERANCE = 1e-3
+        # elif tri_comp > 1e-5:
+        #     TRIANGLETOLERANCE = 5e-3
+        # else:
+        #     TRIANGLETOLERANCE = 1e-2
 
-            for tgt in tri_tgt.itertuples():
-                if absolute_similar:
-                    similar_triangles = tri_ref[
-                        (tri_ref.fX >= tgt.fX - TRIANGLETOLERANCE/2) &
-                        (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE/2) &
-                        (tri_ref.fY >= tgt.fY - TRIANGLETOLERANCE/2) &
-                        (tri_ref.fY <= tgt.fY + TRIANGLETOLERANCE/2)
-                    ]
+        votes = np.zeros((len(df_ref)+1, len(df_tgt)+1), dtype=np.float32)
+
+        for tgt in tri_tgt.itertuples():
+            if absolute_similar:
+                similar_triangles = tri_ref[
+                    (tri_ref.fX >= tgt.fX - TRIANGLETOLERANCE/2) &
+                    (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE/2) &
+                    (tri_ref.fY >= tgt.fY - TRIANGLETOLERANCE/2) &
+                    (tri_ref.fY <= tgt.fY + TRIANGLETOLERANCE/2)
+                ]
+            else:
+                ref_matches = tri_ref[
+                    (tri_ref.fX >= tgt.fX - TRIANGLETOLERANCE/2) &
+                    (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE/2)]
+                similar_triangles = ref_matches[(ref_matches.fX-tgt.fX)**2 + (ref_matches.fY-tgt.fY)**2 < TRIANGLETOLERANCE**2]
+
+            for ref in similar_triangles.itertuples():
+                if vote_with_conf:
+                    err = ((ref.fX-tgt.fX)**2 + (ref.fY-tgt.fY)**2)
+                    upvote = 1/(np.exp(err*100))
+                    downvote = upvote / 2
                 else:
-                    ref_matches = tri_ref[
-                        (tri_ref.fX >= tgt.fX - TRIANGLETOLERANCE/2) &
-                        (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE/2)]
-                    similar_triangles = ref_matches[(ref_matches.fX-tgt.fX)**2 + (ref_matches.fY-tgt.fY)**2 < TRIANGLETOLERANCE**2]
+                    upvote = 1
+                    downvote = 1/2
 
-                for ref in similar_triangles.itertuples():
-                    if vote_with_conf:
-                        err = ((ref.fX-tgt.fX)**2 + (ref.fY-tgt.fY)**2)
-                        upvote = 1/(np.exp(err*100))
-                        downvote = upvote / 4
-                    else:
-                        upvote = 1
-                        downvote = 1/4
+                if vertex_sorted:
+                    # expect matched ABC vertices
+                    votes[ref.A, tgt.A] += upvote
+                    votes[ref.B, tgt.B] += upvote
+                    votes[ref.C, tgt.C] += upvote
 
-                    if vertex_sorted:
-                        # expect matched ABC vertices
-                        votes[ref.A, tgt.A] += upvote
-                        votes[ref.B, tgt.B] += upvote
-                        votes[ref.C, tgt.C] += upvote
+                    if down_votes:
+                        votes[ref.A, tgt.B] -= downvote
+                        votes[ref.A, tgt.C] -= downvote
 
-                        if down_votes:
-                            votes[ref.A, tgt.B] -= downvote
-                            votes[ref.A, tgt.C] -= downvote
-
-                            votes[ref.B, tgt.A] -= downvote
-                            votes[ref.B, tgt.C] -= downvote
-                            
-                            votes[ref.C, tgt.A] -= downvote
-                            votes[ref.C, tgt.B] -= downvote
-                    else:
-                        # expect unordered star indices s1, s2, s3
-                        for a,b in product([ref.s1, ref.s2, ref.s3], [tgt.s1, tgt.s2, tgt.s3]):
-                            votes[int(a), b] += upvote
-            if np.sum(votes) > 10:
-                break
+                        votes[ref.B, tgt.A] -= downvote
+                        votes[ref.B, tgt.C] -= downvote
+                        
+                        votes[ref.C, tgt.A] -= downvote
+                        votes[ref.C, tgt.B] -= downvote
+                else:
+                    # expect unordered star indices s1, s2, s3
+                    for a,b in product([ref.s1, ref.s2, ref.s3], [tgt.s1, tgt.s2, tgt.s3]):
+                        votes[int(a), b] += upvote
             
         # print(f"TRIANGLETOLERANCE: {TRIANGLETOLERANCE}")
         # print(f"Total triangle comparisons: {len(tri_ref) * len(tri_tgt)}")
@@ -127,6 +131,67 @@ class StarMatcher:
 
         return result
 
+
+    def matchStarsToTx(self, df_ref: pd.DataFrame, df_tgt: pd.DataFrame, 
+                   vertex_sorted = True,
+                   limit_ref_triangle_fov=None):
+        """ matchStars in a reference and target dataframes from either database or a photo
+            Adds columns to target dataframe: starno (index in reference dataframe) and votes (int)
+            Returns a transform from df to tgt
+            Code developed in refine_location3.ipynb
+        """
+        result = {
+            'vertex_sorted': vertex_sorted,
+            'limit_ref_triangle_fov': limit_ref_triangle_fov
+        }
+
+        if vertex_sorted:
+            # tri_ref = self._getVertexSortedTriangles(df_ref, combinations(df_ref.index, 3), fov_deg=limit_ref_triangle_fov)
+            tri_ref = pd.DataFrame(self._getVertexSortedDelaunayTriangles(df_ref, fov_deg=limit_ref_triangle_fov))
+            tri_tgt = pd.DataFrame(self._getVertexSortedTriangles(df_tgt, combinations(df_tgt.index, 3), fov_deg=None))
+        else:
+            tri_ref = self._getTriangles(df_ref)
+            tri_tgt = self._getTriangles(df_tgt)
+
+        # print(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
+        result['ref_triangles'] = len(tri_ref)
+        result['tgt_triangles'] = len(tri_tgt)
+
+        TRIANGLETOLERANCE = 1e-2
+        txs = []
+        for tgt in tri_tgt.itertuples():
+            similar_triangles = tri_ref[
+                (tri_ref.fX >= tgt.fX - TRIANGLETOLERANCE/2) &
+                (tri_ref.fX <= tgt.fX + TRIANGLETOLERANCE/2) &
+                (tri_ref.fY >= tgt.fY - TRIANGLETOLERANCE/2) &
+                (tri_ref.fY <= tgt.fY + TRIANGLETOLERANCE/2)
+            ]
+            for r in similar_triangles.itertuples():
+                ra = df_ref.iloc[r.A][['cluster_cx', 'cluster_cy']].tolist()
+                rb = df_ref.iloc[r.B][['cluster_cx', 'cluster_cy']].tolist()
+                rc = df_ref.iloc[r.C][['cluster_cx', 'cluster_cy']].tolist()
+                ta = df_tgt.iloc[tgt.A][['cluster_cx', 'cluster_cy']].tolist()
+                tb = df_tgt.iloc[tgt.B][['cluster_cx', 'cluster_cy']].tolist()
+                tc = df_tgt.iloc[tgt.C][['cluster_cx', 'cluster_cy']].tolist()
+                src = np.stack([ra, rb, rc], dtype=np.float32)
+                dst = np.stack([ta, tb, tc], dtype=np.float32)
+                tx = cv2.getAffineTransform(src, dst)
+                mapped = False
+                for i, (e,c) in enumerate(txs):
+                    if np.linalg.norm(tx - e) < 10000:
+                        txs[i][1] += 1
+                        mapped = True
+                        # print(tx,r.A, r.B, r.C, tgt.A, tgt.B, tgt.C)
+                        break
+                if not mapped:
+                    txs.append([tx, 1])
+
+        tx, num_max_matches = sorted(txs, key=lambda x: x[1], reverse=True)[0]
+        result["matches"] = num_max_matches
+        return tx, result
+
+
+
     def _getTriangles(self, df):
         """ Return pair of side-ratios for each triangle formed by permutations of stars
         For each triangle ABC, with side lengths a,b,c in asc order (c is longest)
@@ -158,6 +223,7 @@ class StarMatcher:
 
     def _getVertexSortedDelaunayTriangles(self, df_ref, fov_deg=None):
         D = None
+        added_triangles = set()
         vTriangles = []
         initial_points = []
         pt_idx = []
@@ -178,7 +244,12 @@ class StarMatcher:
             else:
                 D.add_points(points)
                 if len(df) < 3: continue
-                pt_indices = [[pt_idx[x], pt_idx[y], pt_idx[z]] for x,y,z in D.simplices]
+                pt_indices = []
+                for x, y, z in D.simplices:
+                    a, b, c = pt_idx[x], pt_idx[y], pt_idx[z]
+                    if (a,b,c) not in added_triangles:
+                        added_triangles.add((a, b, c))
+                        pt_indices.append([a, b, c])
                 vTriangles.extend(self._getVertexSortedTriangles(df_ref, pt_indices, fov_deg=fov_deg))
 
         # output triangles sorted by fX

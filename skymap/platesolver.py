@@ -44,24 +44,28 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_l
   result['num_ref'] = len(df_ref)
   result['num_tgt'] = len(df_tgt)
   matcher = StarMatcher()
-  matcher_result = matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
+  tx, matcher_result = matcher.matchStarsToTx(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
+
+  # matcher_result = matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
   result.update(matcher_result)
 
-  # print(f"Solver votes: {df_tgt.votes.sum()}; matches: {(~df_tgt.starno.isnull()).sum()} stars")
-  result['solver_votes'] = df_tgt.votes.sum()
-  result['matches'] = (~df_tgt.starno.isnull()).sum()
+  # # print(f"Solver votes: {df_tgt.votes.sum()}; matches: {(~df_tgt.starno.isnull()).sum()} stars")
+  # result['solver_votes'] = df_tgt.votes.sum()
+  # result['matches'] = (~df_tgt.starno.isnull()).sum()
 
-  img_stars = df_tgt[~df_tgt.starno.isnull()][['starno','cluster_cx', 'cluster_cy', 'votes']]
-  img_ref_stars = df_ref[['id','cluster_cx', 'cluster_cy', 'ra', 'dec']].join(img_stars.set_index('starno'), rsuffix='r', how='right')
+  # img_stars = df_tgt[~df_tgt.starno.isnull()][['starno','cluster_cx', 'cluster_cy', 'votes']]
+  # img_ref_stars = df_ref[['id','cluster_cx', 'cluster_cy', 'ra', 'dec']].join(img_stars.set_index('starno'), rsuffix='r', how='right')
 
-  if len(img_ref_stars) < 3:
-    return result
+  # if len(img_ref_stars) < 3:
+  #   return result
 
-  matched_star_triple = img_ref_stars.sort_values('votes', ascending=False)[:3]
-  src = np.array([(row.cluster_cx, row.cluster_cy) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
-  dst = np.array([(row.cluster_cxr, row.cluster_cyr) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
+  # matched_star_triple = img_ref_stars.sort_values('votes', ascending=False)[:3]
+  # src = np.array([(row.cluster_cx, row.cluster_cy) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
+  # dst = np.array([(row.cluster_cxr, row.cluster_cyr) for _, row in matched_star_triple.iterrows()], dtype=np.float32)
 
-  tx = cv2.getAffineTransform(src, dst)
+  # tx = cv2.getAffineTransform(src, dst)
+
+
   result['tx'] = tx
   df_ref[['img_cx', 'img_cy']] = df_ref.apply(lambda r: pd.Series(np.dot(tx, [r.cluster_cx, r.cluster_cy, 1])).astype(np.int32), axis=1)
 
@@ -75,7 +79,7 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_l
       idx = x.argmin()
       return pd.Series([idx, df_ref.iloc[idx].ra, df_ref.iloc[idx].dec])
     else:
-      return None, None, None
+      return pd.Series([None, None, None])
   df_tgt[['starno', 'ra', 'dec']] = df_tgt.apply(reassign, axis=1)
 
   nonantgt = df_tgt[ (~df_tgt.ra.isna()) & (~df_tgt.dec.isna())]
