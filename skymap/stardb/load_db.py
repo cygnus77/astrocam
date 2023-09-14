@@ -85,13 +85,16 @@ def is_star(typ):
 
 def load_data():
 
+  multi_space_re = re.compile(r"\s+")
   objects_in_the_sky = {}
-  for data_file in tqdm((Path(__file__).parent/"s3").glob("*.txt")):
+  counter = 0
+  for data_file in tqdm((Path(__file__).parent/"s4").glob("*.txt")):
     with data_file.open() as f:
       while r := f.readline():
         if (rowmatch := simbad_row_re.match(r)) is not None:
           obj = {k:normalize(k,v) for k,v in rowmatch.groupdict().items() if k is not None and v is not None}
-          obj["_id"] = obj["id"].replace(" ","")
+          obj["_id"] = counter
+          counter += 1
           obj["star"] = is_star(obj["typ"])
 
           tm = 0
@@ -115,17 +118,21 @@ def load_data():
                 else:
                   prev = ""
                 obj[idm.group(1)] = prev + idm.group(2)
-          objects_in_the_sky[obj['_id']] = obj
 
+          obj["id"] = multi_space_re.sub(" ", obj["id"])
+          unique_id = obj["id"].replace(" ", "")
+          objects_in_the_sky[unique_id] = obj
+
+  return objects_in_the_sky
+
+
+if __name__ == "__main__":
+  objects_in_the_sky = load_data()
   with MongoClient("localhost") as mon:
     db = mon.stars
     db.stars.insert_many(objects_in_the_sky.values(), ordered=False)
-    db.stars.create_index([("_id", TEXT)])
+    db.stars.create_index([("id", TEXT)])
     db.stars.create_index([("mag", ASCENDING)])
     db.stars.create_index([("star", ASCENDING)])
     db.stars.create_index([("icrs.location", GEOSPHERE)])
     mon.close()
-
-
-if __name__ == "__main__":
-  load_data()

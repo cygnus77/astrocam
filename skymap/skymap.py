@@ -71,9 +71,9 @@ class SkyMap:
   def searchName(self, term):
     cursor = self.db.stars.find(
       filter={
-        '_id': {
-            '$regex': term, 
-            '$options': 'i'
+        '$text': {
+            '$search': term, 
+            '$caseSensitive': False
         }
       },
       sort=list({

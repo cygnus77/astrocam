@@ -38,17 +38,19 @@ def sweep_M(outputdir):
   mag_limit = 16
   for segid, ra in tqdm(enumerate(np.arange(0, 24, step_size))):
     for hemisphere,dec_cond in [("nh", "dec>=0"), ("sh", "dec<0")]:
-      with open(f"{outputdir}/simbad_M_{hemisphere}_{segid}.txt", "wt", encoding='utf-8') as f:
+      fpath = f"{outputdir}/simbad_M_{hemisphere}_{segid}.txt"
+      if not os.path.exists(fpath):
+        with open(fpath, "wt", encoding='utf-8') as f:
 
-        resp = requests.get(root_url, cookies={"simbadOptions": cookie}, params={
-          "Criteria": f"cat='NGC'&{dec_cond}&rah>={ra}&rah<{ra+step_size}&(Bmag < {mag_limit} | Vmag< {mag_limit} | Rmag < {mag_limit})",
-          "submit": "submit%20query",
-          "OutputMode": "LIST",
-          "maxObject": "20000",
-          "output.format": "ASCII",
-        })
-        if resp.status_code == 200:
-          f.write(resp.text)
+          resp = requests.get(root_url, cookies={"simbadOptions": cookie}, params={
+            "Criteria": f"cat='NGC'&{dec_cond}&rah>={ra}&rah<{ra+step_size}&(Bmag < {mag_limit} | Vmag< {mag_limit} | Rmag < {mag_limit})",
+            "submit": "submit%20query",
+            "OutputMode": "LIST",
+            "maxObject": "20000",
+            "output.format": "ASCII",
+          })
+          if resp.status_code == 200:
+            f.write(resp.text)
 
 if __name__ == "__main__":
   outputdir = "skymap/stardb/s4"
