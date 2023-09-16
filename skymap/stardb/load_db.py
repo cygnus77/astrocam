@@ -88,7 +88,9 @@ def load_data():
   multi_space_re = re.compile(r"\s+")
   objects_in_the_sky = {}
   counter = 0
-  for data_file in tqdm((Path(__file__).parent/"s4").glob("*.txt")):
+  file_list = list((Path(__file__).parent/"s3").glob("*.txt"))
+  file_list.extend(list((Path(__file__).parent/"s4").glob("*.txt")))
+  for data_file in tqdm(file_list):
     with data_file.open() as f:
       while r := f.readline():
         if (rowmatch := simbad_row_re.match(r)) is not None:
