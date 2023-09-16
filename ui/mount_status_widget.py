@@ -127,7 +127,8 @@ class RefineConfirm(tk.Toplevel):
 
         # Insert the new results into the table
         for idx, result_key in enumerate(['solved', 'separation_arcmin', 'num_ref', 'num_tgt', 'solver_votes', 'matches', 'center', 'tx']):
-            self.table.insert('', 'end', text=str(idx), values=(result_key, solver_result[result_key]))
+            if result_key in solver_result:
+                self.table.insert('', 'end', text=str(idx), values=(result_key, solver_result[result_key]))
 
         if solver_result['solved']:
             def syncandclose():

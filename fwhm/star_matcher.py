@@ -173,8 +173,8 @@ class StarMatcher:
                 ta = df_tgt.iloc[tgt.A][['cluster_cx', 'cluster_cy']].tolist()
                 tb = df_tgt.iloc[tgt.B][['cluster_cx', 'cluster_cy']].tolist()
                 tc = df_tgt.iloc[tgt.C][['cluster_cx', 'cluster_cy']].tolist()
-                src = np.stack([ra, rb, rc], dtype=np.float32)
-                dst = np.stack([ta, tb, tc], dtype=np.float32)
+                src = np.stack([ra, rb, rc]).astype(np.float32)
+                dst = np.stack([ta, tb, tc]).astype(np.float32)
                 tx = cv2.getAffineTransform(src, dst)
                 mapped = False
                 for i, (e,c) in enumerate(txs):
