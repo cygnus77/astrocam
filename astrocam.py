@@ -284,6 +284,7 @@ class AstroCam:
         self.runningExposures = 1
         self.runningLiveView = False
         self.cancelJob = False
+        self.runStatus.set(f"Started sequence")
         job = self.getExposureSettings()
         self.startNextExposure(job)
 
@@ -291,6 +292,7 @@ class AstroCam:
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.exposure_number.set(1)
         self.runningLiveView = False
+        self.runStatus.set(f"Taking snapshot")
         job = self.getExposureSettings()
         self.startNextExposure(job)
 
@@ -328,75 +330,87 @@ class AstroCam:
 
     def endExposure(self, job):
         self.updateProgress(ProgressData(1.0))
-        if self.camera is not None and self.camera.connected:
-            if not self.camera.imageready:
-                self.root.after(250, self.endExposure, job)
-                return
-            img = self.camera.downloadimage()
-            temperature = self.camera.temperature
+        if self.camera is None or not self.camera.connected:
+            # Failed to download image 
+            # Catastrophe!!
+            print("Camera not connected!")
+            self.endRunningExposures("Camera not connected!")
+            return
 
-            hdr = fits.Header({
-                'COMMENT': 'Anand Dinakar',
-                'OBJECT': job["object_name"],
-                'INSTRUME': self.camera.name,
-                'DATE-OBS': job['date_obs'],
-                'EXPTIME': job['exp'],
-                'CCD-TEMP': temperature,
-                'XPIXSZ': self.camera.pixelSize[0], #4.63,
-                'YPIXSZ': self.camera.pixelSize[1], #4.63,
-                'XBINNING': self.camera.binning,
-                'YBINNING': self.camera.binning,
-                'XORGSUBF': 0,
-                'YORGSUBF': 0,
-                'BZERO': 0,
-                'BSCALE': 1,
-                'EGAIN': self.camera.egain,
-                'FOCALLEN': job["focal_length"],
-                'SWCREATE': 'AstroCAM',
-                'SBSTDVER': 'SBFITSEXT Version 1.0',
-                'SNAPSHOT': 1,
-                'SET-TEMP': self.camera.set_temp,
-                'IMAGETYP': job['image_type'], #'Light Frame',
-                'SITELAT': job["latitude"],
-                'SITELONG': job["longitude"],
-                'GAIN': job['iso'],
-                'OFFSET': self.camera.offset,
-                'BAYERPAT': self.camera.sensor_type.name
-            })
+        if not self.camera.imageready:
+            self.root.after(250, self.endExposure, job)
+            return
+        img = self.camera.downloadimage()
+        temperature = self.camera.temperature
 
-            if not self.runningLiveView and not self.runningSimulator:
-                sno_file = Path('serial_no.txt')
-                if sno_file.exists():
-                    serial_no = int(sno_file.read_text())
-                else:
-                    serial_no = 0
-                sno_file.write_text(str(serial_no+1))
+        hdr = fits.Header({
+            'COMMENT': 'Anand Dinakar',
+            'OBJECT': job["object_name"],
+            'INSTRUME': self.camera.name,
+            'DATE-OBS': job['date_obs'],
+            'EXPTIME': job['exp'],
+            'CCD-TEMP': temperature,
+            'XPIXSZ': self.camera.pixelSize[0], #4.63,
+            'YPIXSZ': self.camera.pixelSize[1], #4.63,
+            'XBINNING': self.camera.binning,
+            'YBINNING': self.camera.binning,
+            'XORGSUBF': 0,
+            'YORGSUBF': 0,
+            'BZERO': 0,
+            'BSCALE': 1,
+            'EGAIN': self.camera.egain,
+            'FOCALLEN': job["focal_length"],
+            'SWCREATE': 'AstroCAM',
+            'SBSTDVER': 'SBFITSEXT Version 1.0',
+            'SNAPSHOT': 1,
+            'SET-TEMP': self.camera.set_temp,
+            'IMAGETYP': job['image_type'], #'Light Frame',
+            'SITELAT': job["latitude"],
+            'SITELONG': job["longitude"],
+            'GAIN': job['iso'],
+            'OFFSET': self.camera.offset,
+            'BAYERPAT': self.camera.sensor_type.name
+        })
 
-                now = datetime.now()
-                now = now - timedelta(days=1 if now.hour<6 else 0)
-                output_dir = self.destDir / now.strftime("%Y%m%d")
-                if job['image_type'] == 'Light':
-                    output_dir = output_dir / f"{job['object_name']}/Light"
-                else:
-                    output_dir = output_dir / f"{job['image_type']}_{job['exp']}sec_{job['iso']}gain"
-                output_dir.mkdir(parents=True, exist_ok=True)
-                output_fname = output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{temperature}C.fit"
-                hdu = fits.PrimaryHDU(img, header=hdr)
-                hdu.writeto(output_fname)
+        if not self.runningLiveView and not self.runningSimulator:
+            sno_file = Path('serial_no.txt')
+            if sno_file.exists():
+                serial_no = int(sno_file.read_text())
             else:
-                output_fname = None
+                serial_no = 0
+            sno_file.write_text(str(serial_no+1))
 
-            imageData = ImageData(img, output_fname, hdr)
-            self.imageViewer.update(imageData)
-            self.histoViewer.update(imageData)
-            if job['image_type'] == 'Light' and not self.runningLiveView:
-                imageData.computeStars()
-                if self.fwhmWidget.update(imageData):
-                    if self.onImageReady:
-                        fn = self.onImageReady.pop()
-                        fn(imageData)
-                    self.imageViewer.updateStars()
+            now = datetime.now()
+            now = now - timedelta(days=1 if now.hour<6 else 0)
+            output_dir = self.destDir / now.strftime("%Y%m%d")
+            if job['image_type'] == 'Light':
+                output_dir = output_dir / f"{job['object_name']}/Light"
+            else:
+                output_dir = output_dir / f"{job['image_type']}_{job['exp']}sec_{job['iso']}gain"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_fname = output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{temperature}C.fit"
+            hdu = fits.PrimaryHDU(img, header=hdr)
+            hdu.writeto(output_fname)
+        else:
+            output_fname = None
 
+        # Start next exposure
+        self._start_next_exposure(job)
+
+        # Process last image & update UI
+        imageData = ImageData(img, output_fname, hdr)
+        self.histoViewer.update(imageData)
+        self.imageViewer.update(imageData)
+        
+        if job['image_type'] == 'Light' and not self.runningLiveView:
+            imageData.computeStars()
+            if self.fwhmWidget.update(imageData):
+                if self.onImageReady:
+                    fn = self.onImageReady.pop()
+                    fn(imageData)
+                self.imageViewer.updateStars()
+
+    def _start_next_exposure(self, job):
         # Start next exposure
         if self.runningLiveView:
             if self.cancelJob:

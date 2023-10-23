@@ -11,6 +11,8 @@ from debayer.superpixel import debayer_superpixel
 import pandas as pd
 from image_data import ImageData
 from ui.base_widget import BaseWidget
+from scipy.interpolate import interp1d, PchipInterpolator
+
 
 class ImageViewer(BaseWidget):
 
@@ -22,8 +24,6 @@ class ImageViewer(BaseWidget):
     self.scaledImg = None
     self.starHotSpots = {}
     self.onTargetStarChanged = None
-    self.stretchLow = 0
-    self.stretchHigh = 255
 
     # Image container
     self.imageCanvas = tk.Canvas(self.widgetFrame, background="#200")
@@ -65,15 +65,22 @@ class ImageViewer(BaseWidget):
     self.gammaStr.set(f"{self.gamma.get():.1f}")
 
   def stretch(self, a1, a2):
-    self.gamma.set(1.0)
-    self.gammaStr.set("1.0")
-    high = max(a1, a2)
-    low = min(a1, a2)
-    self.gamma_table = np.zeros((256), dtype=np.uint8)
-    self.gamma_table[:low] = 0
-    self.gamma_table[high:] = 255
-    self.gamma_table[low:high] = np.linspace(0, 255, high-low).astype(np.uint8)
-    self._refreshDisplay()
+    if isinstance(a1, int):
+      self.gamma.set(1.0)
+      self.gammaStr.set("1.0")
+      high = max(a1, a2)
+      low = min(a1, a2)
+      self.gamma_table = np.zeros((256), dtype=np.uint8)
+      self.gamma_table[:low] = 0
+      self.gamma_table[high:] = 255
+      self.gamma_table[low:high] = np.linspace(0, 255, high-low).astype(np.uint8)
+    elif isinstance(a1, list):
+      self.gamma_table = np.zeros((256, 3), dtype=np.uint8)
+      for i in range(3):
+        high = max(a1[i], a2[i])
+        low = min(a1[i], a2[i])
+        spline = PchipInterpolator([0, low, high, 255], [0, 0, 255, 255])
+        self.gamma_table[:, i] = spline(np.arange(256))
 
   def onGammaChange(self, ev):
     self.updateGammaTable()
@@ -117,7 +124,13 @@ class ImageViewer(BaseWidget):
 
     # img = cv2.convertScaleAbs(img, alpha=2.0, beta=50)
 
-    img = cv2.LUT(img, self.gamma_table)
+    if len(self.gamma_table.shape) == 2:
+      r = cv2.LUT(img[:, :, 0], self.gamma_table[:, 0])
+      g = cv2.LUT(img[:, :, 1], self.gamma_table[:, 1])
+      b = cv2.LUT(img[:, :, 2], self.gamma_table[:, 2])
+      img = np.stack([r, g, b], axis=-1)
+    else:
+      img = cv2.LUT(img, self.gamma_table)
 
     h, w = img.shape[:2]
     ppm_header = f'P6 {w} {h} 255 '.encode()

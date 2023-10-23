@@ -9,6 +9,7 @@ from ui.base_widget import BaseWidget
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.ticker as ticker
+from fwhm.fwhm import fit_1dgausssian
 
 
 class HistogramViewer(BaseWidget):
@@ -16,6 +17,7 @@ class HistogramViewer(BaseWidget):
   def __init__(self, parentFrame, image_container):
     super().__init__(parentFrame, "Histogram")
     self.image_container = image_container
+    self.auto_stretch = True
 
     frame = ttk.Frame(self.widgetFrame)
     self.histoCanvas=tk.Canvas(frame, width=300, height=250, background="#200")
@@ -62,6 +64,16 @@ class HistogramViewer(BaseWidget):
     self.ax.plot(red, 'r')
     self.ax.plot(green, 'g')
     self.ax.plot(blue, 'b')
+
+    if self.auto_stretch:
+      a = []
+      b = []
+      for i, h in enumerate([red, green, blue]):
+          ampl, avg, stddev = fit_1dgausssian(h)
+          fwhm = abs(8 * np.log(2) * stddev)
+          a.append(max(int(avg - 2 * fwhm), 0))
+          b.append(min(int(avg + 20 * fwhm), 255))
+      self.image_container.stretch(a, b)
 
     self.canvas.draw()
 

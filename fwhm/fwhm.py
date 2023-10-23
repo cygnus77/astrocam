@@ -65,7 +65,7 @@ def fwhm1d_old(star):
     return abs(coeff[2] * 2.355)
 
 
-def fwhm1d(arr):
+def fit_1dgausssian(arr):
     # Find maximum value of array
     max_val = np.max(arr)
     
@@ -89,6 +89,11 @@ def fwhm1d(arr):
     
     # Fit Gaussian to data using curve_fit
     p1, success = opt.leastsq(errfunc, p0[:], args=(x, y))
+    return p1 if success == 1 else None
+
+def fwhm1d(arr):
+
+    p1 = fit_1dgausssian(arr)
     
     # Calculate FWHM from Gaussian parameters
     fwhm = abs(8 * np.log(2) * p1[2])
