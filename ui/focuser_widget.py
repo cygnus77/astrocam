@@ -1,14 +1,18 @@
 import tkinter as tk
 import tkinter.ttk as ttk
-
+from image_data import ImageData
 from ui.base_widget import BaseWidget
+from pathlib import Path
+import time
 
 class FocuserWidget(BaseWidget):
-  def __init__(self, parentFrame, device):
+  def __init__(self, parentFrame, astrocam, device):
     super().__init__(parentFrame, "Focuser")
 
     self.focuserGotoTgt = tk.IntVar()
     self.focuser = device
+    self.astrocam = astrocam
+
     gotoFrame = ttk.Frame(self.widgetFrame)
     ttk.Button(gotoFrame, text="\u21e7", command=lambda evt: self.focuser.movein(5))
     ttk.Button(gotoFrame, text="\u2191", command=lambda evt: self.focuser.movein(1))
@@ -16,6 +20,8 @@ class FocuserWidget(BaseWidget):
     ttk.Button(gotoFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.RIGHT)
     ttk.Button(gotoFrame, text="\u2193", command=lambda evt: self.focuser.moveout(5))
     ttk.Button(gotoFrame, text="\u21e9", command=lambda evt: self.focuser.moveout(1))
+
+    ttk.Button(gotoFrame, text='Refine', command=self._refine).pack(side=tk.LEFT)
     gotoFrame.pack(fill=tk.X)
 
   def _connect(self, focuser):
@@ -50,3 +56,33 @@ class FocuserWidget(BaseWidget):
       self.hdrInfo.set(self.focuser.position)
       return True
     return False
+
+
+  def _refine(self):
+    self.reset_pos = self.focuser.position
+    self.min = self.reset_pos - 30
+    self.max = self.reset_pos + 30
+    self.mode = 1
+    self.astrocam.onImageReady.append(self._imageRetrieved)
+    self.astrocam.takeSnapshot()
+
+  def _imageRetrieved(self, imageData: ImageData):
+    fname = Path(imageData.fname)
+    fname = fname.rename(fname.parent / f"{fname.stem}_focus{self.focuser.position}{fname.suffix}")
+    print(fname)
+
+    if self.mode == 1:
+      self.focuser.movein(5)
+      time.sleep(2)
+      self.astrocam.onImageReady.append(self._imageRetrieved)
+      self.astrocam.takeSnapshot()
+      if self.focuser.position <= self.min:
+        self.mode = 2
+    elif self.mode == 2:
+      self.focuser.moveout(5)
+      time.sleep(2)
+      self.astrocam.onImageReady.append(self._imageRetrieved)
+      self.astrocam.takeSnapshot()
+      if self.focuser.position >= self.max:
+        self.mode = 0
+        self.focuser.goto(self.reset_pos)

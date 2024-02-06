@@ -32,7 +32,7 @@ class CoolerWidget(BaseWidget):
     self.camera = None
 
   def coolCamera(self):
-    self.thread = Thread(target=self.camera.coolto, args=[0], name="Cool")
+    self.thread = Thread(target=self.camera.coolto, args=[-10], name="Cool")
     self.thread.start()
 
   def warmCamera(self):

@@ -144,7 +144,7 @@ class AstroCam:
 
         # Focuser controls
         focusFrame = ttk.Frame(widgetsFrame)
-        self.focuserWidget = FocuserWidget(focusFrame, self.focuser)
+        self.focuserWidget = FocuserWidget(focusFrame, self, self.focuser)
         self.root.bind("<Key>", self.focuserWidget.onkeypress)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
 
