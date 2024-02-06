@@ -131,4 +131,6 @@ class ImageData:
 
     @property
     def stars(self):
+        if self._stars == None:
+            self.computeStars()
         return self._stars

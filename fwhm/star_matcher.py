@@ -5,9 +5,10 @@ import cv2
 import pandas as pd
 import matplotlib.pyplot as plt
 from itertools import combinations, product
+from collections import defaultdict
 import math
 from scipy.spatial import Delaunay
-
+from .star_finder import StarFinder
 class StarMatcher:
 
     def matchStars(self, df_ref: pd.DataFrame, df_tgt: pd.DataFrame, 
@@ -20,6 +21,7 @@ class StarMatcher:
             Adds columns to target dataframe: starno (index in reference dataframe) and votes (int)
             Returns votes and voting pairs for informational purposes
             Code developed in refine_location.ipynb
+            NOTE: must reset_index on target if it will be reused in future match calls
         """
         result = {
             'vertex_sorted': vertex_sorted,
@@ -334,6 +336,36 @@ class StarMatcher:
         vTriangles = sorted(vTriangles, key=lambda x: x["fX"])
         return vTriangles
 
+def register_stars(image_fnames):
+    """ Register stars across image frames
+    Input: list of image file names
+    Output: List of stars that occur in all frames. For each star, a list of occurances in each frame is returned.
+    """
+    starFinder = StarFinder()
+    matcher = StarMatcher()
+
+    star_frames = []
+    df = None
+    for fname in image_fnames:
+        starData = starFinder.getStarData(fname)['stars']
+        if df is None:
+            df = starData
+            df['starno'] = None
+        else:
+            matcher.matchStars(df, starData, vertex_sorted=False)
+            df = starData[starData.starno.notnull()]
+        star_frames.append(df)
+        df = df.reset_index()
+
+    star_paths = defaultdict(list)
+    for i in range(len(star_frames[-1])):
+        starno = i
+        for frame in star_frames[::-1]:
+            star = frame.iloc[starno]
+            star_paths[i].append(star)
+            starno = star.starno
+
+    return [path[::-1] for _, path in star_paths.items()]
 
 
 if __name__ == "__main__":

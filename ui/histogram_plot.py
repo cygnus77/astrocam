@@ -37,6 +37,10 @@ class HistogramViewer(BaseWidget):
     self.ax.tick_params(axis='x', colors='white')
     self.ax.tick_params(axis='y', colors='white')
 
+    x = np.linspace(0, 255, 5)
+    self.ax.set_xticks(x)
+    self.ax.set_xticklabels([f'{int(tick)}' for tick in x])
+
     self.canvas = FigureCanvasTkAgg(fig, master=self.histoCanvas)
     self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
@@ -51,10 +55,6 @@ class HistogramViewer(BaseWidget):
     green = np.bincount(img[:,:,1].reshape(-1))
     blue = np.bincount(img[:,:,2].reshape(-1))
 
-    # x = np.linspace(0, 65535, 5)
-    # self.ax.set_xticks(x)
-    # self.ax.set_xticklabels([f'{int(tick)//1e3}k' for tick in x])
-
     m = np.max([np.max(red), np.max(blue), np.max(green)])
     m = 1e3 * int((m + 1e3)/1e3)
     y = np.linspace(0, m, 5)
@@ -66,14 +66,21 @@ class HistogramViewer(BaseWidget):
     self.ax.plot(blue, 'b')
 
     if self.auto_stretch:
-      a = []
-      b = []
-      for i, h in enumerate([red, green, blue]):
-          ampl, avg, stddev = fit_1dgausssian(h)
-          fwhm = abs(8 * np.log(2) * stddev)
-          a.append(max(int(avg - 2 * fwhm), 0))
-          b.append(min(int(avg + 20 * fwhm), 255))
-      self.image_container.stretch(a, b)
+      try:
+        a = []
+        b = []
+        for i, h in enumerate([red, green, blue]):
+            fit_g = fit_1dgausssian(h)
+            if fit_g is None:
+              raise ValueError("Gaussian fit error")
+            ampl, avg, stddev = fit_g
+            fwhm = abs(8 * np.log(2) * stddev)
+            a.append(max(int(avg - 2 * fwhm), 0))
+            b.append(min(int(avg + 20 * fwhm), 255))
+        self.image_container.stretch(a, b)
+      except ValueError as err:
+        print(err)
+        pass
 
     self.canvas.draw()
 

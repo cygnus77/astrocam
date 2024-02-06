@@ -4,6 +4,8 @@ from image_data import ImageData
 from ui.base_widget import BaseWidget
 from pathlib import Path
 import time
+import math
+import numpy as np
 
 class FocuserWidget(BaseWidget):
   def __init__(self, parentFrame, astrocam, device):
@@ -59,30 +61,47 @@ class FocuserWidget(BaseWidget):
 
 
   def _refine(self):
-    self.reset_pos = self.focuser.position
-    self.min = self.reset_pos - 30
-    self.max = self.reset_pos + 30
-    self.mode = 1
+    self.minima = self.focuser.position
+    self.search_width = 40
+    self.state = 1
     self.astrocam.onImageReady.append(self._imageRetrieved)
     self.astrocam.takeSnapshot()
+    self.fwhms = []
 
   def _imageRetrieved(self, imageData: ImageData):
     fname = Path(imageData.fname)
     fname = fname.rename(fname.parent / f"{fname.stem}_focus{self.focuser.position}{fname.suffix}")
-    print(fname)
+    fwhm = np.sqrt(imageData.starData.fwhm_x**2 + imageData.starData.fwhm_y**2).mean()
+    self.fwhms.append((self.focuser.position, fwhm))
 
-    if self.mode == 1:
-      self.focuser.movein(5)
-      time.sleep(2)
-      self.astrocam.onImageReady.append(self._imageRetrieved)
-      self.astrocam.takeSnapshot()
-      if self.focuser.position <= self.min:
-        self.mode = 2
-    elif self.mode == 2:
-      self.focuser.moveout(5)
-      time.sleep(2)
-      self.astrocam.onImageReady.append(self._imageRetrieved)
-      self.astrocam.takeSnapshot()
-      if self.focuser.position >= self.max:
-        self.mode = 0
-        self.focuser.goto(self.reset_pos)
+    if self.state == 1:
+      self.focuser.goto(self.minima - self.search_width)
+    elif self.state == 2:
+      self.focuser.goto(self.minima + self.search_width)
+    elif self.state == 3:
+      self.focuser.goto(self.minima - (self.search_width // 2))
+    elif self.state == 4:
+      self.focuser.goto(self.minima + (self.search_width // 2))
+    elif self.state == 5:
+      # fit curve
+      coeffs = np.polyfit([x[0] for x in self.fwhms], [x[1] for x in self.fwhms])
+      if coeffs[0] < 0:
+        # failed
+        self.state = 0
+        print(f"Fit failed: {coeffs}")
+      # calc new minima
+      self.minima = int(-coeffs[1]/2*coeffs[0])
+      # reset fwhms
+      # self.fwhms = []
+      self.state = 0
+      # reduce search_width
+      self.search_width = self.search_width // 2
+      # if search_width < 5 stop
+      if self.search_width < 5:
+        self.focuser.goto(self.minima)
+        return
+
+    time.sleep(5)
+    self.astrocam.onImageReady.append(self._imageRetrieved)
+    self.astrocam.takeSnapshot()  
+    self.state += 1

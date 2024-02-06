@@ -1,5 +1,13 @@
 TODO:
-- Cooler - faster cooling and warmimg ?
+- Cooler - faster cooling and warmimg; set target temperature
+- Manual image stretch is too green
+- Optimize plate solver
+- Auto focus without bhatinov mask or slewing to bright star
+- Pause/resume PHD2 guiding
+- Periodic autofocus
+- Zoom in/out should keep center
+- Drag to pan
+
 - background subtract for FWHM ?
 - Add up, down arrow buttons to focusser widget
 
@@ -10,3 +18,6 @@ TODO:
 
 - Video stream
 - Convolutions for bilinear debayering
+
+
+

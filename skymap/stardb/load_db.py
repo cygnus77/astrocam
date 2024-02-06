@@ -3,6 +3,10 @@ from tqdm import tqdm
 from pathlib import Path
 import re
 
+from astropy.coordinates import SkyCoord
+from astropy import units as u
+from astropy.coordinates import ICRS
+
 # Columns: #, identifier, typ, coord1 (ICRS,J2000/2000), coord4 (Gal,J2000/2000), pm, Mag V, spec. type, ang. size, #Dist, distance Q unit, err-, err+, method, reference
 #simbad_row_re = re.compile(r"\s*\d+\s*\|\s*(?P<id>.*?)\|\s*(?P<typ>.*?)\|\s*(?P<icrs>.*?)\|\s*(?P<gal>.*?)\|\s*(?P<pm>.*?)\|\s*(?P<mag>.*?)\|\s*(?P<spec>.*?)\|\s*(?P<size>.*?)\|.*?\|\s*(?P<distance>.*?)\|.*$")
 hmsdms_re = re.compile(r"(\d\d)\s(\d\d)\s(\d+\.?\d+)\s+([+|-]\d\d)\s(\d\d)\s(\d+\.?\d+)")
@@ -19,20 +23,21 @@ def normalize(k, v):
     return None
   if k == 'icrs':
     rah,ram,ras,decd,decm,decs = hmsdms_re.match(v).groups()
-    ra_deg = 15*(float(rah) + float(ram)/60 + float(ras)/3600)
-    dec_deg = float(decd) + float(decm)/60 + float(decs)/3600
+
+    coord = SkyCoord(f"{rah}h{ram}m{ras}s {decd}d{decm}m{decs}s", frame=ICRS)
+
     return {
       "hmsdms": {
         "ra": f"{rah}h{ram}m{ras}s",
         "dec": f"{decd}d{decm}m{decs}s",
       },
       "deg": {
-        "ra": ra_deg,
-        "dec": dec_deg
+        "ra": coord.ra.degree,
+        "dec": coord.dec.degree
       },
       "location": {
         "type": "Point",
-        "coordinates": [ra_deg - 180, dec_deg], # convert to RA:(-180 to +180) and DEC:(-90 to +90)
+        "coordinates": [coord.ra.degree - 180, coord.dec.degree], # convert to RA:(-180 to +180) and DEC:(-90 to +90)
       }
     }
   elif k == 'icrs2':
@@ -73,7 +78,8 @@ star_terms = [
   "variable",
   "classical nova",
   "wolf-rayet",
-  "supernova"
+  "supernova",
+  "young stellar object"
 ]
 
 def is_star(typ):

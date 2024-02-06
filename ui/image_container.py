@@ -81,6 +81,7 @@ class ImageViewer(BaseWidget):
         low = min(a1[i], a2[i])
         spline = PchipInterpolator([0, low, high, 255], [0, 0, 255, 255])
         self.gamma_table[:, i] = spline(np.arange(256))
+    self._refreshDisplay()
 
   def onGammaChange(self, ev):
     self.updateGammaTable()
