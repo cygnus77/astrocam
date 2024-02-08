@@ -63,15 +63,17 @@ class FocuserWidget(BaseWidget):
   def _refine(self):
     self.minima = self.focuser.position
     self.search_width = 40
+    self.bounds = (self.minima - self.search_width, self.minima + self.search_width)
     self.state = 1
-    self.astrocam.onImageReady.append(self._imageRetrieved)
-    self.astrocam.takeSnapshot()
+    self.astrocam.onImageReady.append(self._fitParabola)
+    self.astrocam.takeSnapshot(iso_override=200, exp_override=5.0)
+    self.tgt_fwhm = None
     self.fwhms = []
 
-  def _imageRetrieved(self, imageData: ImageData):
+  def _fitParabola(self, imageData: ImageData):
     fname = Path(imageData.fname)
     fname = fname.rename(fname.parent / f"{fname.stem}_focus{self.focuser.position}{fname.suffix}")
-    fwhm = np.sqrt(imageData.starData.fwhm_x**2 + imageData.starData.fwhm_y**2).mean()
+    fwhm = np.sqrt(imageData.stars.fwhm_x**2 + imageData.stars.fwhm_y**2).mean()
     self.fwhms.append((self.focuser.position, fwhm))
 
     if self.state == 1:
@@ -84,24 +86,50 @@ class FocuserWidget(BaseWidget):
       self.focuser.goto(self.minima + (self.search_width // 2))
     elif self.state == 5:
       # fit curve
-      coeffs = np.polyfit([x[0] for x in self.fwhms], [x[1] for x in self.fwhms])
+      coeffs = np.polyfit([x[0] for x in self.fwhms], [x[1] for x in self.fwhms], deg=2)
       if coeffs[0] < 0:
         # failed
         self.state = 0
         print(f"Fit failed: {coeffs}")
-      # calc new minima
-      self.minima = int(-coeffs[1]/2*coeffs[0])
-      # reset fwhms
-      # self.fwhms = []
-      self.state = 0
-      # reduce search_width
-      self.search_width = self.search_width // 2
-      # if search_width < 5 stop
-      if self.search_width < 5:
-        self.focuser.goto(self.minima)
         return
+      # calc new minima
+      self.minima = int(-coeffs[1]/(2*coeffs[0]))
+      self.tgt_fwhm = np.polyval(coeffs, self.minima)
+      if self.minima < self.bounds[0]:
+        self.minima = self.bounds[0]
+      elif self.minima > self.bounds[1]:
+        self.minima = self.bounds[1]
+      # reset fwhms
+      self.state = 0
+      # # reduce search_width
+      # self.search_width = int(self.search_width * 2 / 3)
+      # # if search_width < 5 stop
+      # if self.search_width < 10:
+      #   self.focuser.goto(self.minima)
+      #   return
+      self.focuser.goto(self.minima - self.search_width // 2)
+      self.astrocam.onImageReady.append(self._scanMinima)
+      self.astrocam.takeSnapshot(iso_override=200, exp_override=5.0)  
+      return
 
     time.sleep(5)
-    self.astrocam.onImageReady.append(self._imageRetrieved)
-    self.astrocam.takeSnapshot()  
+    self.astrocam.onImageReady.append(self._fitParabola)
+    self.astrocam.takeSnapshot(iso_override=200, exp_override=5.0)  
     self.state += 1
+
+  def _scanMinima(self, imageData: ImageData):
+    fname = Path(imageData.fname)
+    fname = fname.rename(fname.parent / f"{fname.stem}_focus{self.focuser.position}{fname.suffix}")
+    fwhm = np.sqrt(imageData.stars.fwhm_x**2 + imageData.stars.fwhm_y**2).mean()
+    if fwhm < self.tgt_fwhm+1:
+      print(f"Done ! FWHM: {fwhm}")
+      return
+    self.fwhms.append((self.focuser.position, fwhm))
+
+    if self.focuser.position < (self.minima + self.search_width // 2):
+      self.focuser.goto(self.focuser.position + 2)
+      self.astrocam.onImageReady.append(self._scanMinima)
+      self.astrocam.takeSnapshot(iso_override=200, exp_override=5.0)
+    else:
+      final_fwhm, final_pos = np.min(self.fwhms, key=lambda x: x[0])
+      self.focuser.goto(final_pos)

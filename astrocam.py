@@ -288,12 +288,16 @@ class AstroCam:
         job = self.getExposureSettings()
         self.startNextExposure(job)
 
-    def takeSnapshot(self):
+    def takeSnapshot(self, iso_override=None, exp_override=None):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.exposure_number.set(1)
         self.runningLiveView = False
         self.runStatus.set(f"Taking snapshot")
         job = self.getExposureSettings()
+        if iso_override is not None:
+            job['iso'] = iso_override
+        if exp_override is not None:
+            job['exp'] = exp_override
         self.startNextExposure(job)
 
     def startLiveview(self):
