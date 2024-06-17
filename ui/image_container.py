@@ -54,6 +54,9 @@ class ImageViewer(BaseWidget):
     ttk.Label(gammaFrame, textvariable=self.gammaStr).pack(side=tk.LEFT)
     ttk.Scale(gammaFrame, from_=0.01, to=5, length=100, variable=self.gamma, command=self.onGammaChange, orient=tk.HORIZONTAL).pack(side=tk.LEFT)
     gammaFrame.pack(side=tk.LEFT)
+
+    self.starbox_enabled = tk.BooleanVar(value=True)
+    ttk.Checkbutton(imageControlPanel, text='Starbbox', variable=self.starbox_enabled).pack(side=tk.LEFT)
     imageControlPanel.place(x=5, y=5)
 
     self.imageCanvas.bind("<Configure>", self.resize)
@@ -183,6 +186,8 @@ class ImageViewer(BaseWidget):
     self.starHotSpots = {}
     if self.image is None or self.image.stars is None:
        return
+    if not self.starbox_enabled:
+      return
 
     def show_tooltip(event, itemid, star):
       x, y, _, _ = self.imageCanvas.coords(itemid)

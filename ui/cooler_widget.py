@@ -7,7 +7,7 @@ from ui.base_widget import BaseWidget
 
 class CoolerWidget(BaseWidget):
   def __init__(self, parentFrame, device):
-    super().__init__(parentFrame, "Cooler")
+    super().__init__(parentFrame, "Cooler", collapsed=False)
     self.camera = device
 
     self.cameraTemp = tk.StringVar()

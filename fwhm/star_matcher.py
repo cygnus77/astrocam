@@ -39,6 +39,9 @@ class StarMatcher:
             tri_ref = self._getTriangles(df_ref)
             tri_tgt = self._getTriangles(df_tgt)
 
+        if len(tri_ref) == 0 or len(tri_tgt) == 0:
+            return None
+
         # print(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
         result['ref_triangles'] = len(tri_ref)
         result['tgt_triangles'] = len(tri_tgt)

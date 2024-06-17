@@ -40,7 +40,7 @@ class SimulatedCamera():
     
     @property
     def name(self) -> str:
-        return "Simulated Camera"
+        return "Simulator"
     
     @property
     def sensor_type(self) -> SensorType:

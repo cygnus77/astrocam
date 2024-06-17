@@ -5,13 +5,15 @@ import tkinter.ttk as ttk
 from datetime import datetime, timedelta
 import time
 from pathlib import Path
+
+import subprocess
 from image_data import ImageData
 from snap_process import ProgressData
 
 from multiprocessing import Queue
 import queue
 
-from ui.cooler_widget import CoolerWidget
+from app import AstroApp
 from ui.focuser_widget import FocuserWidget
 from ui.fwhm_widget import FWHMWidget
 from ui.histogram_plot import HistogramViewer
@@ -24,9 +26,9 @@ from astropy.io import fits
 
 DEFAULT_NUM_EXPS = 5
 
-class AstroCam:
+class AstroCam(AstroApp):
     def __init__(self, destDir):
-        self.root = tk.Tk()
+        super().__init__()
         self.mount = None
         self.camera = None
         self.focuser = None
@@ -69,39 +71,6 @@ class AstroCam:
         self.longitude = tk.StringVar()
         self.longitude.set("-74 20 42.000")
 
-        # Styling
-        self.EntryFont = ("Segoe UI", 14)
-        self.entryWidth = 5
-        inactivebgcolor = "#100"
-        bgcolor = "#200"
-        bgcolor3 = "#300"
-        bordercolor = "#500"
-        fgcolor = "#d22"
-        highlightedcolor = "#800"
-
-        # self.root.tk.call('lappend', 'auto_path', './tksvg0.11')
-        self.root.tk.call('lappend', 'auto_path', './awthemes-10.4.0')
-        self.root.tk.call('source', './awthemes-10.4.0/awdark.tcl')
-
-        self.root.style = ttk.Style()
-
-        self.root.style.theme_use('awdark')
-        self.root.style.configure("TButton", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
-        self.root.style.configure("TProgressbar", troughcolor='black', background=fgcolor, height=1, relief='flat')
-        self.root.style.configure("TFrame", foreground=fgcolor, background=bgcolor)
-        self.root.style.configure("TLabel", padding=2, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
-        self.root.style.configure("TCombobox", padding=2, foreground=fgcolor, background=bgcolor, fieldbackground='black', font=self.EntryFont, width=4)
-        self.root.style.configure("TEntry", padding=2, foreground=fgcolor, background=bgcolor, fieldbackground='black')
-        self.root.style.configure("Vertical.TScrollbar", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
-        self.root.style.configure("Horizontal.TScrollbar", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
-        self.root.style.configure("X.TButton", padding=0, foreground=fgcolor, background=bgcolor, font=self.EntryFont)
-        self.root.style.configure("Horizontal.TSlider", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
-
-        self.root.style.map("Vertical.TScrollbar",
-            background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
-        self.root.style.map("Horizontal.TScrollbar",
-            background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
-
         # Layout
         paned_window = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         paned_window.pack(fill=tk.BOTH, expand=True)
@@ -137,10 +106,6 @@ class AstroCam:
 
         # Focuser and thermal controls
         widgetsFrame = ttk.Frame(scrollableControlPanelFrame, relief='raised')
-        # Setup cooler controls
-        coolerFrame = ttk.Frame(widgetsFrame)
-        self.coolerWidget = CoolerWidget(coolerFrame, self.camera)
-        coolerFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Focuser controls
         focusFrame = ttk.Frame(widgetsFrame)
@@ -513,7 +478,7 @@ class AstroCam:
 
     def statusPolling(self):
         if self.connected:
-            arr = [self.mountStatusWidget, self.coolerWidget, self.focuserWidget]
+            arr = [self.mountStatusWidget, self.focuserWidget]
             arr[self.pollingCounter % len(arr)].update()
             self.pollingCounter += 1
             self.root.after(1000, self.statusPolling)
@@ -536,15 +501,14 @@ class AstroCam:
             self.focuser = None
             self.mountStatusWidget.disconnect()
             self.focuserWidget.disconnect()
-            self.coolerWidget.disconnect()
             self.runStatus.set("Disconnected")
         else:
             try:
                 self.mount, self.camera, self.focuser = selectEquipment(self.root)
+                subprocess.Popen(["python.exe", "./coolerapp.py", self.camera.name], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
                 self.runningSimulator = self.camera.isSimulator()
                 self.mountStatusWidget.connect(self.mount)
                 self.focuserWidget.connect(self.focuser)
-                self.coolerWidget.connect(self.camera)
                 self.connected = True
                 self.connectBtn['image'] = self.off_icon
                 self.root.after_idle(self.statusPolling)

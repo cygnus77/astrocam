@@ -139,11 +139,31 @@ selected_mount_index = 0
 selected_camera_index = 0
 selected_focuser_index = 0
 
+MOUNT_CHOICES = ['Gemini-Ascom', 'Simulator', 'Simulator-Ascom']
+CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
+FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
+
+def make_camera(camera_name, parent=None):
+  # Instantiate selected camera
+  if camera_name == "294MC-Native":
+    from asi_native.asinative_camera import ASINativeCamera
+    camera = ASINativeCamera("294")
+  elif camera_name == "294MC-Ascom":
+    from Alpaca.camera import Camera
+    camera = Camera("294")
+  elif camera_name == "Nikon D90":
+    raise NotImplementedError()
+  elif camera_name == "Nikon D750":
+    raise NotImplementedError()
+  elif camera_name == "Simulator":
+    from simulated_devices.simulated_camera import SimulatedCamera
+    # If simulator is selected, prmompt for folder containing images
+    imageFolder = filedialog.askdirectory(title="Select folder containing images", parent=parent)
+    camera = SimulatedCamera(imageFolder)
+  return camera
+
 def selectEquipment(parent=None):
     global selected_mount_index, selected_camera_index, selected_focuser_index
-    MOUNT_CHOICES = ['Gemini-Ascom', 'Simulator', 'Simulator-Ascom']
-    CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
-    FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
 
     if Path("equipment.json").exists():
       with open("equipment.json", "r") as f:
@@ -175,22 +195,7 @@ def selectEquipment(parent=None):
       from Alpaca.mount import Mount
       mount = Mount("Simulator")
 
-    # Instantiate selected camera
-    if equipment_selection.camera == "294MC-Native":
-        from asi_native.asinative_camera import ASINativeCamera
-        camera = ASINativeCamera("294")
-    elif equipment_selection.camera == "294MC-Ascom":
-        from Alpaca.camera import Camera
-        camera = Camera("294")
-    elif equipment_selection.camera == "Nikon D90":
-        raise NotImplementedError()
-    elif equipment_selection.camera == "Nikon D750":
-        raise NotImplementedError()
-    elif equipment_selection.camera == "Simulator":
-        from simulated_devices.simulated_camera import SimulatedCamera
-        # If simulator is selected, prmompt for folder containing images
-        imageFolder = filedialog.askdirectory(title="Select folder containing images", parent=parent)
-        camera = SimulatedCamera(imageFolder)
+    camera = make_camera(equipment_selection.camera)
 
     # Instantiate selected focuser
     if equipment_selection.focuser == "Celestron-Ascom":
