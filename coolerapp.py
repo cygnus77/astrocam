@@ -22,8 +22,9 @@ class CoolerApp(AstroApp):
     coolerFrame = ttk.Frame(paned_window)
     self.coolerWidget = CoolerWidget(coolerFrame, self.camera)
     coolerFrame.pack(fill=tk.X, side=tk.TOP)
-
     paned_window.add(coolerFrame, weight=1)
+    self.coolerWidget.connect(self.camera)
+    self.root.after_idle(self.statusPolling)
 
   def statusPolling(self):
     self.coolerWidget.update()
