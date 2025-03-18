@@ -1,13 +1,13 @@
-import time
+from pathlib import Path
+import random
 import tkinter as tk
 import tkinter.ttk as ttk
 import rawpy
-from PIL import ImageTk
+from PIL import ImageTk, Image
 from astropy.io import fits
 import cv2
 import numpy as np
 from debayer.bilinear import debayer_bilinear
-from debayer.superpixel import debayer_superpixel
 import pandas as pd
 from image_data import ImageData
 from ui.base_widget import BaseWidget
@@ -18,7 +18,9 @@ class ImageViewer(BaseWidget):
 
   def __init__(self, parentFrame):
     super().__init__(parentFrame, "RGB Image", collapsed=False, expand=True)
-    self.image = None
+    image_fname = str(random.choice(list(Path(r"C:\Users\anand\Pictures\Astro").glob("**/*.jpg"))))
+    # image_fname = r"C:\images\20241103\NGC6888C27\Light\Light_07137_180.0sec_300gain_-0.3C.fit"
+    self.image = ImageData(raw=None, fname=image_fname, header=None)
     self.imageScale = 1.0
     self.highlights = None
     self.scaledImg = None
@@ -55,11 +57,30 @@ class ImageViewer(BaseWidget):
     ttk.Scale(gammaFrame, from_=0.01, to=5, length=100, variable=self.gamma, command=self.onGammaChange, orient=tk.HORIZONTAL).pack(side=tk.LEFT)
     gammaFrame.pack(side=tk.LEFT)
 
-    self.starbox_enabled = tk.BooleanVar(value=True)
-    ttk.Checkbutton(imageControlPanel, text='Starbbox', variable=self.starbox_enabled).pack(side=tk.LEFT)
+    self.starbox_enabled = tk.BooleanVar(value=False)
+    ttk.Checkbutton(imageControlPanel, text='Starbbox', variable=self.starbox_enabled, command=self.updateStars).pack(side=tk.LEFT)
     imageControlPanel.place(x=5, y=5)
 
     self.imageCanvas.bind("<Configure>", self.resize)
+    self.imageCanvas.bind("<MouseWheel>", self._onMouseWheel)
+    self.imageCanvas.bind("<ButtonPress-1>", self._onMousePress)
+    self.imageCanvas.bind("<B1-Motion>", self._onMouseDrag)
+    self.imageCanvas.bind("<ButtonRelease-1>", self._onMouseRelease)
+
+  def _onMouseWheel(self, event):
+      if event.delta > 0:
+          self.zoomin()
+      else:
+          self.zoomout()
+
+  def _onMousePress(self, event):
+    self.imageCanvas.scan_mark(event.x, event.y)
+
+  def _onMouseDrag(self, event):
+      self.imageCanvas.scan_dragto(event.x, event.y, gain=1)
+
+  def _onMouseRelease(self, event):
+      pass
 
   def updateGammaTable(self):
     invGamma = 1.0 / self.gamma.get()
@@ -94,7 +115,7 @@ class ImageViewer(BaseWidget):
     if self.image is None:
       return
     imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
-    print(imgCanvasWidth, imgCanvasHeight)
+    # print("canvas size: ", imgCanvasWidth, imgCanvasHeight)
     imgAspect = self.image.rgb24.shape[0] / self.image.rgb24.shape[1]
 
     if imgCanvasWidth * imgAspect <= imgCanvasHeight:
@@ -110,6 +131,8 @@ class ImageViewer(BaseWidget):
     if scaledImg.dtype == np.uint16:
       scaledImg = (scaledImg / 256).astype(np.uint8)
     self.scaledImg = scaledImg
+    # print("scaled image size: ", scaledImg.shape[1], scaledImg.shape[0])
+    
 
   def _refreshDisplay(self):
     if self.scaledImg is None:
@@ -137,9 +160,12 @@ class ImageViewer(BaseWidget):
       img = cv2.LUT(img, self.gamma_table)
 
     h, w = img.shape[:2]
-    ppm_header = f'P6 {w} {h} 255 '.encode()
-    data = ppm_header + img.tobytes()
-    self.imageObject = ImageTk.PhotoImage(width=w, height=h, data=data, format='PPM')
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    self.imageObject = ImageTk.PhotoImage(image=Image.fromarray(img))
+    # OR, 
+    # ppm_header = f'P6 {w} {h} 255 '.encode()
+    # data = ppm_header + img.tobytes()
+    # self.imageObject = ImageTk.PhotoImage(width=w, height=h, data=data, format='PPM')
 
     c_x, c_y = w//2, h//2
     if self.image_container is None:
@@ -151,23 +177,42 @@ class ImageViewer(BaseWidget):
       self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
       self.imageCanvas.moveto('crosshairs', c_x-25, c_y-25)
 
+  def _updateZoom(self, new_scale):
+      old_scale = self.imageScale
+      self.imageScale = new_scale
+      vw = self.imageCanvas.winfo_width()
+      vh = self.imageCanvas.winfo_height()
+      # Get center point of canvas in view & update with new scale
+      center_x = self.imageCanvas.canvasx(vw//2)
+      center_y = self.imageCanvas.canvasy(vh//2)
+      center_x = int(center_x * new_scale / old_scale)
+      center_y = int(center_y * new_scale / old_scale)
+      return max(0, center_x - vw/2), max(0, center_y - vh/2)
 
   def zoomin(self):
     if self.imageScale < 5:
-      self.imageScale += 0.5
+      scroll_xpos, scroll_ypos = self._updateZoom(self.imageScale + 0.5)
       self._scaleImage()
       self._refreshDisplay()
       self.updateStars()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+      w, h = self.scaledImg.shape[1], self.scaledImg.shape[0]
+      self.imageCanvas.xview_moveto(scroll_xpos/w)
+      self.imageCanvas.yview_moveto(scroll_ypos/h)
+
 
   def zoomout(self):
     if self.imageScale > 0.5:
-      self.imageScale -= 0.5
+      scroll_xpos, scroll_ypos = self._updateZoom(self.imageScale - 0.5)
       self._scaleImage()
       self._refreshDisplay()
       self.updateStars()
       self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-      
+      w, h = self.scaledImg.shape[1], self.scaledImg.shape[0]
+      self.imageCanvas.xview_moveto(scroll_xpos/w)
+      self.imageCanvas.yview_moveto(scroll_ypos/h)
+
+
   def resize(self, event):
     self._scaleImage()
     self._refreshDisplay()
@@ -186,7 +231,7 @@ class ImageViewer(BaseWidget):
     self.starHotSpots = {}
     if self.image is None or self.image.stars is None:
        return
-    if not self.starbox_enabled:
+    if not self.starbox_enabled.get():
       return
 
     def show_tooltip(event, itemid, star):

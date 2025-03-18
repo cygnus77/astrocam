@@ -5,6 +5,19 @@ import rawpy
 from fwhm.star_finder import StarFinder
 from fwhm.star_matcher import StarMatcher
 
+
+def rgb2rggb(img):
+  r_m = np.zeros(shape=img.shape[:2], dtype=np.uint8)
+  r_m[0::2, 0::2] = 1
+  g1_m = np.zeros(shape=img.shape[:2], dtype=np.uint8)
+  g1_m[0::2, 1::2] = 1
+  g2_m = np.zeros(shape=img.shape[:2], dtype=np.uint8)
+  g2_m[1::2, 0::2] = 1
+  b_m = np.zeros(shape=img.shape[:2], dtype=np.uint8)
+  b_m[1::2, 1::2] = 1
+
+  return (img[:,:,0] * r_m) + (img[:,:,1] * g1_m) + (img[:,:,1] * g2_m) + (img[:,:,2] * b_m)
+
 class ImageData:
     def __init__(self, raw, fname, header):
         self._raw = raw
@@ -78,6 +91,10 @@ class ImageData:
                         self._rgb24 = img
                     else:
                         raise NotImplementedError(f"Unsupported bayer pattern: {ph.header['BAYERPAT']}")
+
+            elif ext in ['png', 'tif', 'jpg']:
+                # convert to Bayer RGGB by creating an np.array
+                self._raw = rgb2rggb(cv2.cvtColor(cv2.imread(self.fname, cv2.IMREAD_COLOR_BGR), cv2.COLOR_BGR2RGB))
 
         return self._raw
 

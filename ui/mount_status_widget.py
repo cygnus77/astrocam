@@ -19,20 +19,23 @@ class MountStatusWidget(BaseWidget):
         self.device = device
         self.astrocam = astrocam
 
-        statusFrame = ttk.Frame(self.widgetFrame)
+        mountFrame = ttk.Frame(self.widgetFrame)
+        statusFrame = ttk.Frame(mountFrame)
         # Textbox to show coordinates
         self.radec = tk.StringVar()
-        ttk.Label(statusFrame, textvariable=self.radec, width=45).pack(side=tk.TOP)
-        # Textbox to show obj name
+        ttk.Label(statusFrame, textvariable=self.radec, font=("TkDefaultFont", 10), wraplength=200).pack(side=tk.TOP)
+        # Textbox to show obj name with slightly larger font and multiline
         self.objname = tk.StringVar()
-        ttk.Label(statusFrame, textvariable=self.objname, width=45).pack(side=tk.TOP)
+        ttk.Label(statusFrame, textvariable=self.objname, font=("TkDefaultFont", 10), wraplength=200).pack(side=tk.TOP)
+
         statusFrame.pack(side=tk.TOP)
 
-        gotoFrame = ttk.Frame(self.widgetFrame)
+        gotoFrame = ttk.Frame(mountFrame)
         ttk.Button(gotoFrame, text='Goto...', command=self._goto).pack(side=tk.LEFT)
         ttk.Button(gotoFrame, text='Refine', command=self._refine).pack(side=tk.LEFT)
         gotoFrame.pack(side=tk.TOP)
 
+        mountFrame.pack(fill=tk.X)
         self.update()
 
     def _connectSkyMap(self):

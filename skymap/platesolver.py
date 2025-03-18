@@ -1,6 +1,5 @@
 import numpy as np
 import cv2
-from debayer.superpixel import debayer_superpixel
 from astropy.io import fits
 from fwhm.star_matcher import StarMatcher
 from fwhm.star_finder import StarFinder

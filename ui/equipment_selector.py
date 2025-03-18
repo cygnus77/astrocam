@@ -122,13 +122,13 @@ class EquipmentSelector(tk.Toplevel):
   def onOK(self):
     if "Ascom" in self.mount+self.camera+self.focuser:
       # Ascom required
-      if "ASCOM.RemoteServer.exe" not in [p.name() for p in psutil.process_iter()]:
-        p = psutil.Popen(r"ASCOM.RemoteServer.exe", shell=True, cwd=r"C:\Program Files (x86)\ASCOM\Remote")
+      if "RemoteServer.exe" not in [p.name() for p in psutil.process_iter()]:
+        p = psutil.Popen(r"RemoteServer.exe", shell=True, cwd=r"C:\Program Files\ASCOM\RemoteServer")
         started = False
         while not started:
           time.sleep(2)
           for p in psutil.process_iter():
-            if "ASCOM.RemoteServer.exe" in p.name():
+            if "RemoteServer.exe" in p.name():
               if len(p.connections()) >= 1:
                 started = True
                 time.sleep(2)

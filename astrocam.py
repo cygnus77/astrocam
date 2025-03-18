@@ -84,7 +84,7 @@ class AstroCam(AstroApp):
         scrollableControlPanelFrame, controlPanelFrame = self.createScollableControlPanel(paned_window)
 
         # Add the frames to the PanedWindow
-        paned_window.add(imageViewerFrame, weight=5)
+        paned_window.add(imageViewerFrame, weight=99)
         paned_window.add(controlPanelFrame, weight=1)
 
         # Histogram
@@ -130,6 +130,8 @@ class AstroCam(AstroApp):
         imagingControlsFrame=ttk.Frame(scrollableControlPanelFrame, relief='raised')
         self.setupControlBoard(imagingControlsFrame)
         imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
+
+        self.enableExpButtons(False)
 
 
     def createScollableControlPanel(self, parentFrame, width=350):
@@ -502,6 +504,7 @@ class AstroCam(AstroApp):
             self.mountStatusWidget.disconnect()
             self.focuserWidget.disconnect()
             self.runStatus.set("Disconnected")
+            self.enableExpButtons(False)
         else:
             try:
                 self.mount, self.camera, self.focuser = selectEquipment(self.root)
@@ -513,6 +516,7 @@ class AstroCam(AstroApp):
                 self.connectBtn['image'] = self.off_icon
                 self.root.after_idle(self.statusPolling)
                 self.runStatus.set("Connected")
+                self.enableExpButtons(True)
             except Exception as err:
                 traceback.print_exc()
                 self.runStatus.set("Unable to connect")

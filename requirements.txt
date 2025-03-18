@@ -6,3 +6,9 @@ tensorflow
 psutil
 pyserial
 astroquery
+opencv-python
+rawpy
+tqdm
+pandas
+scikit-learn
+pymongo

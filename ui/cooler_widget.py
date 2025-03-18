@@ -12,11 +12,37 @@ class CoolerWidget(BaseWidget):
 
     self.cameraTemp = tk.StringVar()
     # self.cameraCooler = tk.StringVar()
+    self.targetCoolTemp = tk.DoubleVar(value=0.0)
+    self.targetWarmTemp = tk.DoubleVar(value=25.0)
 
     tempFrame = ttk.Frame(self.widgetFrame)
-    ttk.Button(tempFrame, text="Cool", command=self.coolCamera).pack(side=tk.LEFT, padx=5, pady=5)
-    ttk.Label(tempFrame, textvariable=self.cameraTemp).pack(side=tk.LEFT, padx=5, pady=5)
-    ttk.Button(tempFrame, text="Warm", command=self.warmCamera).pack(side=tk.LEFT, padx=5, pady=5)
+    
+    # First row: [ [targettemp, label ], button ]
+    coolFrame = ttk.Frame(tempFrame)
+    targetCoolFrame = ttk.Frame(coolFrame)
+    ttk.Entry(targetCoolFrame, textvariable=self.targetCoolTemp, width=10, font=("Helvetica", 12)).pack(side=tk.LEFT, padx=5, pady=5)
+    ttk.Label(targetCoolFrame, text="°C").pack(side=tk.LEFT, padx=5, pady=5)
+    targetCoolFrame.pack(side=tk.TOP, fill=tk.X)
+    ttk.Button(coolFrame, text="Cool", command=self.coolCamera).pack(side=tk.BOTTOM, padx=5, pady=5, fill=tk.X)
+    coolFrame.pack(side=tk.LEFT, fill=tk.X)
+    
+    ttk.Separator(tempFrame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
+
+    # Second row: [ cameraTemp ]
+    ttk.Label(tempFrame, textvariable=self.cameraTemp, font=("Helvetica", 16)).pack(side=tk.LEFT, padx=5, pady=5)
+    
+    ttk.Separator(tempFrame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
+
+    # Third row: [ [targettemp, label ], button ]
+    warmFrame = ttk.Frame(tempFrame)
+    targetWarmFrame = ttk.Frame(warmFrame)
+    ttk.Entry(targetWarmFrame, textvariable=self.targetWarmTemp, width=10, font=("Helvetica", 12)).pack(side=tk.LEFT, padx=5, pady=5)
+    ttk.Label(targetWarmFrame, text="°C").pack(side=tk.LEFT, padx=5, pady=5)
+    targetWarmFrame.pack(side=tk.TOP, fill=tk.X)
+    ttk.Button(warmFrame, text="Warm", command=self.warmCamera).pack(side=tk.BOTTOM, padx=5, pady=5, fill=tk.X)
+    warmFrame.pack(side=tk.LEFT, fill=tk.X)
+
+
     tempFrame.pack(fill=tk.X, side=tk.TOP)
     # Cooler & power status
     # coolerFrame = ttk.Frame(self.widgetFrame)
@@ -32,7 +58,7 @@ class CoolerWidget(BaseWidget):
     self.camera = None
 
   def coolCamera(self):
-    self.thread = Thread(target=self.camera.coolto, args=[-10], name="Cool")
+    self.thread = Thread(target=self.camera.coolto, args=[self.targetCoolTemp.get()], name="Cool")
     self.thread.start()
 
   def warmCamera(self):
