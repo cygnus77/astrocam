@@ -12,3 +12,4 @@ tqdm
 pandas
 scikit-learn
 pymongo
+zwoasi

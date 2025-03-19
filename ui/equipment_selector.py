@@ -140,12 +140,12 @@ selected_camera_index = 0
 selected_focuser_index = 0
 
 MOUNT_CHOICES = ['Gemini-Ascom', 'Simulator', 'Simulator-Ascom']
-CAMERA_CHOICES = ['294MC-Native', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
+CAMERA_CHOICES = ['ZWO ASI294MC Pro', '294MC-Ascom', 'Nikon D90', 'Nikon D750', 'Simulator']
 FOCUSER_CHOICES = ['Celestron-Ascom', 'None', 'Simulator']
 
 def make_camera(camera_name, parent=None):
   # Instantiate selected camera
-  if camera_name == "294MC-Native":
+  if camera_name == "ZWO ASI294MC Pro":
     from asi_native.asinative_camera import ASINativeCamera
     camera = ASINativeCamera("294")
   elif camera_name == "294MC-Ascom":
