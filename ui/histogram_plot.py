@@ -50,17 +50,24 @@ class HistogramViewer(BaseWidget):
   def _update(self, img: ImageData):
     if img is None:
       return
-    img = img.rgb24
-    red = np.bincount(img[:,:,0].reshape(-1))
-    green = np.bincount(img[:,:,1].reshape(-1))
-    blue = np.bincount(img[:,:,2].reshape(-1))
+
+    if False:
+      img = img.deb16
+      red, _ = np.histogram(img[:,:,0], bins=256, range=(0, 65536))
+      green, _ = np.histogram(img[:,:,1], bins=256, range=(0, 65536))
+      blue, _ = np.histogram(img[:,:,2], bins=256, range=(0, 65536))
+    else:
+      img = img.rgb24
+      red = np.bincount(img[:,:,0].reshape(-1))
+      green = np.bincount(img[:,:,1].reshape(-1))
+      blue = np.bincount(img[:,:,2].reshape(-1))
 
     m = np.max([np.max(red), np.max(blue), np.max(green)])
-    m = 1e3 * int((m + 1e3)/1e3)
+    # m = 1e3 * int((m + 1e3)/1e3)
     y = np.linspace(0, m, 5)
+    self.ax.clear()
     self.ax.set_yticks(y)
-    self.ax.set_yticklabels(['{:.0f}k'.format(tick/1e3) for tick in y])
-
+    self.ax.set_yticklabels([])
     self.ax.plot(red, 'r')
     self.ax.plot(green, 'g')
     self.ax.plot(blue, 'b')
@@ -78,6 +85,12 @@ class HistogramViewer(BaseWidget):
             a.append(max(int(avg - 2 * fwhm), 0))
             b.append(min(int(avg + 20 * fwhm), 255))
         self.image_container.stretch(a, b)
+
+        cols = ['red', 'green', 'blue']
+        for i, (avg_a, avg_b) in enumerate(zip(a, b)):
+            self.ax.scatter(avg_a, m, color=cols[i], marker='>', s=50)
+            self.ax.scatter(avg_b, m, color=cols[i], marker='<', s=50)
+
       except ValueError as err:
         print(err)
         pass

@@ -1,3 +1,4 @@
+import random
 import traceback
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -132,6 +133,25 @@ class AstroCam(AstroApp):
         imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
         self.enableExpButtons(False)
+        self.root.after(0, self.loadSplashImage)
+
+
+    def loadSplashImage(self):
+        # img_root = Path(r"C:\images\plate-solving-samples")
+        # img_dir = random.choice([d for d in img_root.iterdir() if d.is_dir()])
+        # image_fname = str(random.choice(list(img_dir.glob("**/*.fit"))))
+        image_fname = r"C:\images\20241103\NGC6888C27\Light\Light_07137_180.0sec_300gain_-0.3C.fit"
+        imageData = ImageData(raw=None, fname=image_fname, header=None)
+
+        self.histoViewer.update(imageData)
+        self.imageViewer.update(imageData)
+        imageData.computeStars()
+        if self.fwhmWidget.update(imageData):
+            if self.onImageReady:
+                fn = self.onImageReady.pop()
+                fn(imageData)
+            self.imageViewer.updateStars()
+
 
 
     def createScollableControlPanel(self, parentFrame, width=350):

@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 import random
 import tkinter as tk
@@ -18,9 +19,7 @@ class ImageViewer(BaseWidget):
 
   def __init__(self, parentFrame):
     super().__init__(parentFrame, "RGB Image", collapsed=False, expand=True)
-    image_fname = str(random.choice(list(Path(r"C:\Users\anand\Pictures\Astro").glob("**/*.jpg"))))
-    # image_fname = r"C:\images\20241103\NGC6888C27\Light\Light_07137_180.0sec_300gain_-0.3C.fit"
-    self.image = ImageData(raw=None, fname=image_fname, header=None)
+    self.image = None
     self.imageScale = 1.0
     self.highlights = None
     self.scaledImg = None
@@ -67,6 +66,17 @@ class ImageViewer(BaseWidget):
     self.imageCanvas.bind("<B1-Motion>", self._onMouseDrag)
     self.imageCanvas.bind("<ButtonRelease-1>", self._onMouseRelease)
 
+    # Overlay to show age of the image in seconds since loading
+    self.ageLabel = tk.Label(self.imageCanvas, background="#000", foreground="#FFF", font=("Arial", 10), anchor="e")
+    self.ageLabel.place(relx=1.0, rely=0.0, x=-10, y=10, anchor="ne")
+    self.imageLoadTime = None
+    def updateAgeLabel():
+      if self.imageLoadTime is not None:
+        age_seconds = int(time.time() - self.imageLoadTime)
+        self.ageLabel.configure(text=f"{age_seconds}s")
+      self.imageCanvas.after(1000, updateAgeLabel)
+    updateAgeLabel()
+
   def _onMouseWheel(self, event):
       if event.delta > 0:
           self.zoomin()
@@ -103,7 +113,7 @@ class ImageViewer(BaseWidget):
       for i in range(3):
         high = max(a1[i], a2[i])
         low = min(a1[i], a2[i])
-        spline = PchipInterpolator([0, low, high, 255], [0, 0, 255, 255])
+        spline = PchipInterpolator([0, low, high, 256], [0, 0, 255, 256])
         self.gamma_table[:, i] = spline(np.arange(256))
     self._refreshDisplay()
 
@@ -220,8 +230,8 @@ class ImageViewer(BaseWidget):
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
 
   def _update(self, imgData: ImageData):
-
     self.image = imgData
+    self.imageLoadTime = time.time()
     self._scaleImage()
     self._refreshDisplay()
     return True
