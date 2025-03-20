@@ -51,7 +51,8 @@ class HistogramViewer(BaseWidget):
     if img is None:
       return
 
-    if False:
+    start_time = time.time()
+    if True:
       img = img.deb16
       red, _ = np.histogram(img[:,:,0], bins=256, range=(0, 65536))
       green, _ = np.histogram(img[:,:,1], bins=256, range=(0, 65536))
@@ -61,6 +62,8 @@ class HistogramViewer(BaseWidget):
       red = np.bincount(img[:,:,0].reshape(-1))
       green = np.bincount(img[:,:,1].reshape(-1))
       blue = np.bincount(img[:,:,2].reshape(-1))
+    end_time = time.time()
+    print(f"Execution time for histogram calculation: {end_time - start_time:.6f} seconds")
 
     m = np.max([np.max(red), np.max(blue), np.max(green)])
     # m = 1e3 * int((m + 1e3)/1e3)
