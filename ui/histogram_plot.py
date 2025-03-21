@@ -23,8 +23,10 @@ class RGBHistogramSlider(tk.Canvas):
     self.high_val = [init_high, init_high, init_high]
     self.padding = 10
 
-    self.low_marker = [self.create_oval(0, 0, 10, 10, fill=col, outline="black") for col in ['red', 'green', 'blue']]
-    self.high_marker = [self.create_oval(0, 0, 10, 10, fill=col, outline="black") for col in ['red', 'green', 'blue']]
+    self.right_marker = (0, 0, 9, 5, 0, 9, 0, 0)
+    self.left_marker = (9, 0, 9, 9, 0, 5, 9, 0)
+    self.low_marker = [self.create_polygon(*self.right_marker, fill=col, outline=col) for col in ['red', 'green', 'blue']]
+    self.high_marker = [self.create_polygon(*self.left_marker, fill=col, outline=col) for col in ['red', 'green', 'blue']]
     self.marker_offsets = [10, 25, 40]
     self.range_line = [
       self.create_line(0, 0, 0, 0, fill=col, width=2) for col in ['red', 'green', 'blue']
@@ -39,8 +41,17 @@ class RGBHistogramSlider(tk.Canvas):
       low_x = self._value_to_x(self.low_val[i])
       high_x = self._value_to_x(self.high_val[i])
       offset_y = self.marker_offsets[i]
-      self.coords(self.low_marker[i], low_x - 5, offset_y - 5, low_x + 5, offset_y + 5)
-      self.coords(self.high_marker[i], high_x - 5, offset_y - 5, high_x + 5, offset_y + 5)
+      
+      translated_right_marker = []
+      translated_left_marker = []
+      for j in range(0, len(self.right_marker), 2):
+        translated_right_marker.append(self.right_marker[j] + low_x)
+        translated_right_marker.append(self.right_marker[j+1] + offset_y - 5)
+        translated_left_marker.append(self.left_marker[j] + high_x - 1)
+        translated_left_marker.append(self.left_marker[j+1] + offset_y - 5)
+
+      self.coords(self.low_marker[i], *translated_right_marker)
+      self.coords(self.high_marker[i], *translated_left_marker)
       self.coords(self.range_line[i],
         self._value_to_x(self.low_val[i]), self.marker_offsets[i], 
         self._value_to_x(self.high_val[i]), self.marker_offsets[i])
@@ -54,24 +65,19 @@ class RGBHistogramSlider(tk.Canvas):
   def _on_drag(self, event):
     x = max(self.padding, min(event.x, self.width - self.padding))
     value = int(self._x_to_value(x))
-    for i in range(3):  # Iterate over the markers for red, green, and blue
+    for i in range(3):
       offset_y = self.marker_offsets[i]
-      if abs(event.y - offset_y) <= 5:  # Check if the drag is near the current row
+      if abs(event.y - offset_y) <= 5:
         if abs(x - self._value_to_x(self.low_val[i])) < abs(x - self._value_to_x(self.high_val[i])):
           self.low_val[i] = max(self.min_val, min(value, self.high_val[i]))
         else:
           self.high_val[i] = min(self.max_val, max(value, self.low_val[i]))
-        break  # Only update the row being dragged
+        break
     self._update_positions()
     self.event_generate("<<RangeChanged>>")
 
   def _on_click(self, event):
     self._on_drag(event)
-
-  def get_range(self):
-    return self.low_val, self.high_val
-
-
 
 
 class HistogramViewer(BaseWidget):
@@ -86,7 +92,7 @@ class HistogramViewer(BaseWidget):
     self.histoCanvas.pack(side=tk.TOP)
 
     button_frame = ttk.Frame(frame)
-    button_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
+    button_frame.pack(side=tk.TOP, fill=tk.X)
 
     self.lock_button = tk.Button(button_frame, text="🔓", command=self._toggle_lock, bg="#200", fg="white", relief=tk.FLAT)
     self.lock_button.pack(side=tk.LEFT, padx=5)
