@@ -142,7 +142,6 @@ class AstroCam(AstroApp):
         # image_fname = str(random.choice(list(img_dir.glob("**/*.fit"))))
         image_fname = r"C:\images\20241103\NGC6888C27\Light\Light_07137_180.0sec_300gain_-0.3C.fit"
         imageData = ImageData(raw=None, fname=image_fname, header=None)
-
         self.histoViewer.update(imageData)
         self.imageViewer.update(imageData)
         imageData.computeStars()
@@ -151,7 +150,6 @@ class AstroCam(AstroApp):
                 fn = self.onImageReady.pop()
                 fn(imageData)
             self.imageViewer.updateStars()
-
 
 
     def createScollableControlPanel(self, parentFrame, width=350):

@@ -12,27 +12,98 @@ import matplotlib.ticker as ticker
 from fwhm.fwhm import fit_1dgausssian
 
 
+class RGBHistogramSlider(tk.Canvas):
+  def __init__(self, parent, width=300, height=50, min_val=0, max_val=255, init_low=0, init_high=255, **kwargs):
+    super().__init__(parent, width=width, height=height, background="#200", highlightbackground="#200", highlightthickness=0, **kwargs)
+    self.min_val = min_val
+    self.max_val = max_val
+    self.width = width
+    self.height = height
+    self.low_val = [init_low, init_low, init_low]
+    self.high_val = [init_high, init_high, init_high]
+    self.padding = 10
+
+    self.low_marker = [self.create_oval(0, 0, 10, 10, fill=col, outline="black") for col in ['red', 'green', 'blue']]
+    self.high_marker = [self.create_oval(0, 0, 10, 10, fill=col, outline="black") for col in ['red', 'green', 'blue']]
+    self.marker_offsets = [10, 25, 40]
+    self.range_line = [
+      self.create_line(0, 0, 0, 0, fill=col, width=2) for col in ['red', 'green', 'blue']
+    ]
+
+    self.bind("<B1-Motion>", self._on_drag)
+    self.bind("<Button-1>", self._on_click)
+    self._update_positions()
+
+  def _update_positions(self):
+    for i in range(3):
+      low_x = self._value_to_x(self.low_val[i])
+      high_x = self._value_to_x(self.high_val[i])
+      offset_y = self.marker_offsets[i]
+      self.coords(self.low_marker[i], low_x - 5, offset_y - 5, low_x + 5, offset_y + 5)
+      self.coords(self.high_marker[i], high_x - 5, offset_y - 5, high_x + 5, offset_y + 5)
+      self.coords(self.range_line[i],
+        self._value_to_x(self.low_val[i]), self.marker_offsets[i], 
+        self._value_to_x(self.high_val[i]), self.marker_offsets[i])
+
+  def _value_to_x(self, value):
+    return self.padding + (value - self.min_val) / (self.max_val - self.min_val) * (self.width - 2 * self.padding)
+
+  def _x_to_value(self, x):
+    return self.min_val + (x - self.padding) / (self.width - 2 * self.padding) * (self.max_val - self.min_val)
+
+  def _on_drag(self, event):
+    x = max(self.padding, min(event.x, self.width - self.padding))
+    value = int(self._x_to_value(x))
+    for i in range(3):  # Iterate over the markers for red, green, and blue
+      offset_y = self.marker_offsets[i]
+      if abs(event.y - offset_y) <= 5:  # Check if the drag is near the current row
+        if abs(x - self._value_to_x(self.low_val[i])) < abs(x - self._value_to_x(self.high_val[i])):
+          self.low_val[i] = max(self.min_val, min(value, self.high_val[i]))
+        else:
+          self.high_val[i] = min(self.max_val, max(value, self.low_val[i]))
+        break  # Only update the row being dragged
+    self._update_positions()
+    self.event_generate("<<RangeChanged>>")
+
+  def _on_click(self, event):
+    self._on_drag(event)
+
+  def get_range(self):
+    return self.low_val, self.high_val
+
+
+
+
 class HistogramViewer(BaseWidget):
 
   def __init__(self, parentFrame, image_container):
     super().__init__(parentFrame, "Histogram")
     self.image_container = image_container
-    self.auto_stretch = True
 
     frame = ttk.Frame(self.widgetFrame)
     self.histoCanvas=tk.Canvas(frame, width=300, height=250, background="#200")
     self.histoCanvas.pack(side=tk.TOP)
-    self.low = tk.IntVar(value=0)
-    self.high = tk.IntVar(value=255)
-    lowSlider = ttk.Scale(frame, variable=self.low, from_=0, to=255, length=235, orient='horizontal', command=self.slider_changed)
-    highSlider = ttk.Scale(frame, variable=self.high, from_=0, to=255, length=235, orient='horizontal', command=self.slider_changed)
-    lowSlider.place(x=38, y=0)
-    highSlider.place(x=38, y=10)
+
+    button_frame = ttk.Frame(frame)
+    button_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
+
+    self.lock_button = tk.Button(button_frame, text="🔓", command=self._toggle_lock, bg="#200", fg="white", relief=tk.FLAT)
+    self.lock_button.pack(side=tk.LEFT, padx=5)
+    self.locked = False
+
+    self.auto_button = tk.Button(button_frame, text="⚡", command=self._toggle_auto, bg="#200", fg="white", relief=tk.FLAT)
+    self.auto_button.pack(side=tk.LEFT, padx=5)
+    self.auto_stretch = True
+
+    self.range_slider = RGBHistogramSlider(frame, width=300)
+    self.range_slider.pack(side=tk.TOP, fill=tk.X)
+    self.range_slider.bind("<<RangeChanged>>", self.slider_changed)
+
     frame.pack(side=tk.TOP)
 
     fig = Figure(figsize=(3.0, 2.5), dpi=100)
     fig.set_facecolor("#200")
-    self.ax = fig.add_subplot(111)
+    self.ax = fig.add_axes([0, 0, 1, 1])  # Make the axis fill the entire figure
     self.ax.set_facecolor("#200")
     self.ax.tick_params(axis='x', colors='white')
     self.ax.tick_params(axis='y', colors='white')
@@ -44,8 +115,48 @@ class HistogramViewer(BaseWidget):
     self.canvas = FigureCanvasTkAgg(fig, master=self.histoCanvas)
     self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
+    self.red = None
+    self.green = None
+    self.blue = None
+
+  def _toggle_auto(self):
+    self.auto_stretch = not self.auto_stretch
+    self.auto_button.config(text="⚡️" if self.auto_stretch else "🛠️")
+    if self.auto_stretch:
+      self._stretch()
+
+  def _toggle_lock(self):
+    self.locked = not self.locked
+    self.lock_button.config(text="🔒" if self.locked else "🔓")
+
   def slider_changed(self, evt):
-    self.image_container.stretch(self.low.get(), self.high.get())
+    if self.locked:
+      self.image_container.stretch(self.range_slider.low_val[0], self.range_slider.high_val[0])
+    else:
+      self.image_container.stretch(self.range_slider.low_val, self.range_slider.high_val)
+
+  def _stretch(self):
+    if self.red is None or self.green is None or self.blue is None:
+      return
+    try:
+      a = []
+      b = []
+      for i, h in enumerate([self.red, self.green, self.blue]):
+          fit_g = fit_1dgausssian(h)
+          if fit_g is None:
+            raise ValueError("Gaussian fit error")
+          ampl, avg, stddev = fit_g
+          fwhm = abs(8 * np.log(2) * stddev)
+          a.append(max(int(avg - 2 * fwhm), 0))
+          b.append(min(int(avg + 20 * fwhm), 255))
+      self.image_container.stretch(a, b)
+
+      self.range_slider.low_val = [int(a) for a in a]
+      self.range_slider.high_val = [int(b) for b in b]
+      self.range_slider._update_positions()
+    except ValueError as err:
+      print(err)
+      pass
 
   def _update(self, img: ImageData):
     if img is None:
@@ -53,48 +164,28 @@ class HistogramViewer(BaseWidget):
 
     if True:
       img = img.deb16
-      red, _ = np.histogram(img[:,:,0], bins=256, range=(0, 65536))
-      green, _ = np.histogram(img[:,:,1], bins=256, range=(0, 65536))
-      blue, _ = np.histogram(img[:,:,2], bins=256, range=(0, 65536))
+      self.red, _ = np.histogram(img[:,:,0], bins=256, range=(0, 65536))
+      self.green, _ = np.histogram(img[:,:,1], bins=256, range=(0, 65536))
+      self.blue, _ = np.histogram(img[:,:,2], bins=256, range=(0, 65536))
     else:
       img = img.rgb24
-      red = np.bincount(img[:,:,0].reshape(-1))
-      green = np.bincount(img[:,:,1].reshape(-1))
-      blue = np.bincount(img[:,:,2].reshape(-1))
+      self.red = np.bincount(img[:,:,0].reshape(-1))
+      self.green = np.bincount(img[:,:,1].reshape(-1))
+      self.blue = np.bincount(img[:,:,2].reshape(-1))
 
-    m = np.max([np.max(red), np.max(blue), np.max(green)])
+    m = np.max([np.max(self.red), np.max(self.blue), np.max(self.green)])
     # m = 1e3 * int((m + 1e3)/1e3)
     y = np.linspace(0, m, 5)
     self.ax.clear()
     self.ax.set_yticks(y)
     self.ax.set_yticklabels([])
-    self.ax.plot(red, 'r')
-    self.ax.plot(green, 'g')
-    self.ax.plot(blue, 'b')
+    self.ax.plot(self.red, 'r')
+    self.ax.plot(self.green, 'g')
+    self.ax.plot(self.blue, 'b')
 
     if self.auto_stretch:
-      try:
-        a = []
-        b = []
-        for i, h in enumerate([red, green, blue]):
-            fit_g = fit_1dgausssian(h)
-            if fit_g is None:
-              raise ValueError("Gaussian fit error")
-            ampl, avg, stddev = fit_g
-            fwhm = abs(8 * np.log(2) * stddev)
-            a.append(max(int(avg - 2 * fwhm), 0))
-            b.append(min(int(avg + 20 * fwhm), 255))
-        self.image_container.stretch(a, b)
-
-        cols = ['red', 'green', 'blue']
-        for i, (avg_a, avg_b) in enumerate(zip(a, b)):
-            self.ax.scatter(avg_a, m, color=cols[i], marker='>', s=50)
-            self.ax.scatter(avg_b, m, color=cols[i], marker='<', s=50)
-
-      except ValueError as err:
-        print(err)
-        pass
-
+      self._stretch()
+  
     self.canvas.draw()
 
 
