@@ -80,8 +80,9 @@ class HistogramViewer(BaseWidget):
     super().__init__(parentFrame, "Histogram")
     self.image_container = image_container
 
+    width = 350
     frame = ttk.Frame(self.widgetFrame)
-    self.histoCanvas=tk.Canvas(frame, width=300, height=250, background="#200")
+    self.histoCanvas=tk.Canvas(frame, width=width, height=250, background="#200")
     self.histoCanvas.pack(side=tk.TOP)
 
     button_frame = ttk.Frame(frame)
@@ -95,13 +96,13 @@ class HistogramViewer(BaseWidget):
     self.auto_button.pack(side=tk.LEFT, padx=5)
     self.auto_stretch = True
 
-    self.range_slider = RGBHistogramSlider(frame, width=300)
+    self.range_slider = RGBHistogramSlider(frame, width=width)
     self.range_slider.pack(side=tk.TOP, fill=tk.X)
     self.range_slider.bind("<<RangeChanged>>", self.slider_changed)
 
     frame.pack(side=tk.TOP)
 
-    fig = Figure(figsize=(3.0, 2.5), dpi=100)
+    fig = Figure(figsize=(width/72, 2.5), dpi=72)
     fig.set_facecolor("#200")
     self.ax = fig.add_axes([0, 0, 1, 1])  # Make the axis fill the entire figure
     self.ax.set_facecolor("#200")

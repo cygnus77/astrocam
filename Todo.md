@@ -1,5 +1,4 @@
 TODO:
-- Manual image stretch is too green
 - Optimize plate solver
 - Auto focus without bhatinov mask or slewing to bright star
 - Pause/resume PHD2 guiding
