@@ -133,14 +133,22 @@ class AstroCam(AstroApp):
         imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
         self.enableExpButtons(False)
-        self.root.after(0, self.loadSplashImage)
+        self.root.after(1000, self.loadSplashImage)
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def on_closing(self):
+        if tk.messagebox.askokcancel("Quit", "Are you sure you want to exit?"):
+            if self.runningExposures or self.runningLiveView:
+                self.cancel()
+            self.root.destroy()
 
 
     def loadSplashImage(self):
         # img_root = Path(r"C:\images\plate-solving-samples")
         # img_dir = random.choice([d for d in img_root.iterdir() if d.is_dir()])
         # image_fname = str(random.choice(list(img_dir.glob("**/*.fit"))))
-        image_fname = r"C:\images\20241103\NGC6888C27\Light\Light_07137_180.0sec_300gain_-0.3C.fit"
+        image_fname = r"splash.fit"
         imageData = ImageData(raw=None, fname=image_fname, header=None)
         self.histoViewer.update(imageData)
         self.imageViewer.update(imageData)
@@ -505,6 +513,8 @@ class AstroCam(AstroApp):
 
     def toggleconnect(self):
         if self.connected:
+            if tk.messagebox.askokcancel("Disconnect", "Are you sure you want to disconnect?") is False:
+                return
             if self.runningExposures or self.runningLiveView:
                 self.cancel()
 
@@ -526,6 +536,8 @@ class AstroCam(AstroApp):
         else:
             try:
                 self.mount, self.camera, self.focuser = selectEquipment(self.root)
+                if self.mount is None or self.camera is None or self.focuser is None:
+                    return
                 subprocess.Popen(["python.exe", "./coolerapp.py", self.camera.name], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
                 self.runningSimulator = self.camera.isSimulator()
                 self.mountStatusWidget.connect(self.mount)

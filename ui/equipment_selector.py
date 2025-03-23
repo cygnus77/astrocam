@@ -85,6 +85,8 @@ class EquipmentSelector(tk.Toplevel):
 
     # Add OK button
     ttk.Button(self.frame, text="OK", command=self.onOK).grid(row=3, column=0, columnspan=2, sticky=tk.E+tk.W)
+
+    self.protocol("WM_DELETE_WINDOW", self.onCancel)
    
     # resize frame to fill window and center
     self.frame.pack(fill=tk.BOTH, expand=True)
@@ -135,6 +137,13 @@ class EquipmentSelector(tk.Toplevel):
               break
     self.destroy()
 
+  def onCancel(self):
+    self.destroy()
+    self.mount = None
+    self.camera = None
+    self.focuser = None
+    self.imageFolder = None
+
 selected_mount_index = 0
 selected_camera_index = 0
 selected_focuser_index = 0
@@ -174,6 +183,8 @@ def selectEquipment(parent=None):
 
     equipment_selection = EquipmentSelector(parent, MOUNT_CHOICES, CAMERA_CHOICES, FOCUSER_CHOICES, selected_mount_index, selected_camera_index, selected_focuser_index)
     equipment_selection.wait_window()
+    if equipment_selection.mount is None:
+        return None, None, None
     selected_mount_index = MOUNT_CHOICES.index(equipment_selection.mount)
     selected_camera_index = CAMERA_CHOICES.index(equipment_selection.camera)
     selected_focuser_index = FOCUSER_CHOICES.index(equipment_selection.focuser)

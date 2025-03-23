@@ -159,8 +159,8 @@ class HistogramViewer(BaseWidget):
             raise ValueError("Gaussian fit error")
           ampl, avg, stddev = fit_g
           fwhm = abs(8 * np.log(2) * stddev)
-          a.append(max(int(avg - 2 * fwhm), 0))
-          b.append(min(int(avg + 20 * fwhm), 255))
+          a.append(max(int(avg - 4 * fwhm), 0))
+          b.append(min(int(avg + 7 * fwhm), 255))
       self.image_container.stretch(a, b)
 
       self.slider_low_val = [int(a) for a in a]

@@ -16,14 +16,21 @@ class FocuserWidget(BaseWidget):
     self.astrocam = astrocam
 
     gotoFrame = ttk.Frame(self.widgetFrame)
-    ttk.Button(gotoFrame, text="\u21e7", command=lambda evt: self.focuser.movein(5))
-    ttk.Button(gotoFrame, text="\u2191", command=lambda evt: self.focuser.movein(1))
-    ttk.Entry(gotoFrame,textvariable=self.focuserGotoTgt, font=BaseWidget.EntryFont, width=BaseWidget.EntryWidth).pack(side=tk.LEFT, fill=tk.X)
-    ttk.Button(gotoFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.RIGHT)
-    ttk.Button(gotoFrame, text="\u2193", command=lambda evt: self.focuser.moveout(5))
-    ttk.Button(gotoFrame, text="\u21e9", command=lambda evt: self.focuser.moveout(1))
+    buttonFrame = ttk.Frame(gotoFrame)
+    buttonFrame.pack(fill=tk.X)
 
-    ttk.Button(gotoFrame, text='Refine', command=self._refine).pack(side=tk.LEFT)
+    ttk.Button(buttonFrame, text="\u21e7", command=lambda: self.focuser.movein(5)).pack(side=tk.LEFT,  fill=tk.X, padx=2)
+    ttk.Button(buttonFrame, text="\u2191", command=lambda: self.focuser.movein(1)).pack(side=tk.LEFT,  fill=tk.X, padx=2)
+    ttk.Button(buttonFrame, text="\u2193", command=lambda: self.focuser.moveout(1)).pack(side=tk.LEFT,  fill=tk.X, padx=2)
+    ttk.Button(buttonFrame, text="\u21e9", command=lambda: self.focuser.moveout(5)).pack(side=tk.LEFT, fill=tk.X, padx=2)
+
+    controlFrame = ttk.Frame(gotoFrame)
+    controlFrame.pack(fill=tk.X, padx=5, pady=5)
+
+    ttk.Entry(controlFrame, textvariable=self.focuserGotoTgt, font=BaseWidget.EntryFont, width=BaseWidget.EntryWidth).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+    ttk.Button(controlFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+    ttk.Button(controlFrame, text='Refine', command=self._refine).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+
     gotoFrame.pack(fill=tk.X)
 
   def _connect(self, focuser):
