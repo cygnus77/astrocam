@@ -33,8 +33,14 @@ class ServiceBase(threading.Thread):
         """
         raise NotImplementedError("Subclasses must implement the process() method.")
 
+    def on_start(self):
+        """ Hook for subclasses to run code on thread start
+        """
+        pass
+
     def run(self):
         print(f"Started {self.__class__.__name__} thread")
+        self.on_start()
         while True:
             with self._job_avbl:
                 self._job_avbl.wait()
@@ -66,6 +72,27 @@ class ServiceBase(threading.Thread):
             return True
         else:
             return False
+
+    def run_job(self, job):
+        if self._job_avbl.acquire(blocking=False):
+            if self._processing.is_set():
+                self._job_avbl.release()
+                return None
+            try:
+                self.job = job
+                self._on_success = None
+                self._on_failure = None
+                self._processing.set()
+                self.process()
+                for cb in self._completion_callbacks:
+                    cb(self.output)
+                return self.output
+            except Exception as e:
+                self.error_message = f"{self.__class__.__name__}: {e}"
+                return None
+            finally:
+                self._processing.clear()
+                self._job_avbl.release()
 
     def _on_job_done(self, event):
         try:

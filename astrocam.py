@@ -615,17 +615,18 @@ class AstroCam(AstroApp):
                     return
                 subprocess.Popen(["python.exe", "./coolerapp.py", self.camera.name], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
                 self.runningSimulator = self.camera.isSimulator()
-                self.mountStatusWidget.connect(self.mount)
-                if self.focuser:
-                    self.focuserWidget.connect(self.focuser, self.camera)
-                self.connected = True
-                self.connectBtn['image'] = self.off_icon
-                self.runStatus.set("Connected")
 
                 self.camera_svc = CaptureService(self.root, self.camera)
                 self.root.bind(CaptureService.CaptureStatusUpdateEventName, self._on_capture_status_update)
                 self.camera_svc.subscribe(self.histoViewer.update)
                 self.camera_svc.subscribe(self.imageViewer.update)
+
+                self.mountStatusWidget.connect(self.mount, self.camera_svc)
+                if self.focuser:
+                    self.focuserWidget.connect(self.focuser, self.camera_svc)
+                self.connected = True
+                self.connectBtn['image'] = self.off_icon
+                self.runStatus.set("Connected")
 
                 self.enableExpButtons(True)
 

@@ -16,6 +16,10 @@ class SimulatedMount():
         return
     
     @property
+    def connected(self) -> bool:
+        return True
+    
+    @property
     def coordinates(self) -> SkyCoord:
         return self._coordinates
 

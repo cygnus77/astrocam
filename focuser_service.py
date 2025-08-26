@@ -9,14 +9,14 @@ from image_data import ImageData
 
 class FocuserService(ServiceBase):
 
-    PositionUpdateEventName = "<<position_update>>"
+    PositionUpdateEventName = "<<focuser_position_update>>"
     AutofocusEventName = "<<autofocus_event>>"
 
-    def __init__(self, tk_root, focuser, camera):
+    def __init__(self, tk_root, focuser, camera_svc):
         super().__init__(tk_root)
         self._focuser = focuser
-        self._camera = camera
-        self._tk_root.after(1000, self._publish_focuser_position)
+        self._camera_svc = camera_svc
+        self._tk_root.after(1000, self._poll_focuser_position)
 
     def _publish_focuser_position(self):
         if self._focuser is not None and self._focuser.connected:
@@ -93,57 +93,75 @@ class FocuserService(ServiceBase):
             raise RuntimeError("Focuser not connected")
 
     def _snap(self, position):
-        exposure_time = 5.0
-        gain = 200
-        save_focus_images = True
+        job = {
+            "object_name": "auto_focus",
+            "focal_length": 0,
+            "latitude": None,
+            "longitude": None,
+            "iso": 200,
+            "exp": 5.0,
+            "image_type": "Light",
+            "output_fname": f"{self.autofocus_number}_{position}_focus.fit"
+        }
+        imageData = self._camera_svc.run_job(job)
+        if imageData is None:
+            raise RuntimeError("Capture failed")
+        imageData.computeStars()
+        fwhm = np.sqrt(imageData.stars.fwhm_x**2 + imageData.stars.fwhm_y**2).mean()
+        return fwhm
 
-        if self._camera is not None and self._camera.connected:
-            self._camera.gain = gain
-            self._camera.start_exposure(exposure_time)
-            img_dt = 500 # ms
-            img_steps = int(exposure_time * 1000 / img_dt)
-            steps = 0
-            while not self._camera.imageready:
-                time.sleep(img_dt / 1000)
-                steps += 1
-                self._tk_root.event_generate(CaptureService.CaptureStatusUpdateEventName, when="tail", x=1, y=int(100*steps/img_steps))
-            img = self._camera.downloadimage()
-            temperature = self._camera.temperature
-            hdr = fits.Header({
-                'COMMENT': 'Anand Dinakar',
-                'OBJECT': "auto_focus",
-                'INSTRUME': self._camera.name,
-                'DATE-OBS': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-                'EXPTIME': exposure_time,
-                'CCD-TEMP': temperature,
-                'XPIXSZ': self._camera.pixelSize[0], #4.63,
-                'YPIXSZ': self._camera.pixelSize[1], #4.63,
-                'XBINNING': self._camera.binning,
-                'YBINNING': self._camera.binning,
-                'XORGSUBF': 0,
-                'YORGSUBF': 0,
-                'BZERO': 0,
-                'BSCALE': 1,
-                'EGAIN': self._camera.egain,
-                'SWCREATE': 'AstroCAM',
-                'SBSTDVER': 'SBFITSEXT Version 1.0',
-                'SNAPSHOT': 1,
-                'SET-TEMP': self._camera.set_temp,
-                'IMAGETYP': 'Light Frame',
-                'GAIN': gain,
-                'OFFSET': self._camera.offset,
-                'BAYERPAT': self._camera.sensor_type.name
-            })
-            if save_focus_images:
-                output_fname = f"{self.autofocus_number}_{position}_focus.fit"
-                hdu = fits.PrimaryHDU(img, header=hdr)
-                hdu.writeto(output_fname)
-            else:
-                output_fname = None
-            imageData = ImageData(img, output_fname, hdr)
-            imageData.computeStars()
-            fwhm = np.sqrt(imageData.stars.fwhm_x**2 + imageData.stars.fwhm_y**2).mean()
-            return fwhm
+    # def _snap(self, position):
+    #     exposure_time = 5.0
+    #     gain = 200
+    #     save_focus_images = True
+
+    #     if self._camera is not None and self._camera.connected:
+    #         self._camera.gain = gain
+    #         self._camera.start_exposure(exposure_time)
+    #         img_dt = 500 # ms
+    #         img_steps = int(exposure_time * 1000 / img_dt)
+    #         steps = 0
+    #         while not self._camera.imageready:
+    #             time.sleep(img_dt / 1000)
+    #             steps += 1
+    #             self._tk_root.event_generate(CaptureService.CaptureStatusUpdateEventName, when="tail", x=1, y=int(100*steps/img_steps))
+    #         img = self._camera.downloadimage()
+    #         temperature = self._camera.temperature
+    #         hdr = fits.Header({
+    #             'COMMENT': 'Anand Dinakar',
+    #             'OBJECT': "auto_focus",
+    #             'INSTRUME': self._camera.name,
+    #             'DATE-OBS': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+    #             'EXPTIME': exposure_time,
+    #             'CCD-TEMP': temperature,
+    #             'XPIXSZ': self._camera.pixelSize[0], #4.63,
+    #             'YPIXSZ': self._camera.pixelSize[1], #4.63,
+    #             'XBINNING': self._camera.binning,
+    #             'YBINNING': self._camera.binning,
+    #             'XORGSUBF': 0,
+    #             'YORGSUBF': 0,
+    #             'BZERO': 0,
+    #             'BSCALE': 1,
+    #             'EGAIN': self._camera.egain,
+    #             'SWCREATE': 'AstroCAM',
+    #             'SBSTDVER': 'SBFITSEXT Version 1.0',
+    #             'SNAPSHOT': 1,
+    #             'SET-TEMP': self._camera.set_temp,
+    #             'IMAGETYP': 'Light Frame',
+    #             'GAIN': gain,
+    #             'OFFSET': self._camera.offset,
+    #             'BAYERPAT': self._camera.sensor_type.name
+    #         })
+    #         if save_focus_images:
+    #             output_fname = f"{self.autofocus_number}_{position}_focus.fit"
+    #             hdu = fits.PrimaryHDU(img, header=hdr)
+    #             hdu.writeto(output_fname)
+    #         else:
+    #             output_fname = None
+    #         imageData = ImageData(img, output_fname, hdr)
+    #         imageData.computeStars()
+    #         fwhm = np.sqrt(imageData.stars.fwhm_x**2 + imageData.stars.fwhm_y**2).mean()
+    #         return fwhm
 
     def _goto(self, position):
         if self._focuser is None or not self._focuser.connected:

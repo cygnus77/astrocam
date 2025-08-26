@@ -43,14 +43,14 @@ class FocuserWidget(BaseWidget):
     self._tk_root.bind(FocuserService.AutofocusEventName, self._update_autofocus_status)
 
 
-  def _connect(self, focuser, camera):
+  def _connect(self, focuser, camera_svc):
     self.focuser = focuser
-    self.camera = camera
-    self.focuser_svc = FocuserService(self._tk_root, self.focuser, self.camera)
+    self.focuser_svc = FocuserService(self._tk_root, self.focuser, camera_svc)
     self._tk_root.bind(FocuserService.PositionUpdateEventName, self._update_focuser_position)
 
   def _disconnect(self):
     self.focuser = None
+    self.focuser_svc.terminate()
 
   def _on_focuser_error(self, job, error):
     self.status = self.EXCLAMATION

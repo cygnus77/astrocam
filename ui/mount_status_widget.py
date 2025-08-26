@@ -1,5 +1,6 @@
 import tkinter as tk
 import tkinter.ttk as ttk
+from mount_service import MountService
 from skymap.skymap import SkyMap
 import skymap.platesolver as PS
 import psutil
@@ -15,9 +16,8 @@ from settings import config
 class MountStatusWidget(BaseWidget):
     def __init__(self, tk_root, parentFrame, astrocam, device) -> None:
         super().__init__(parentFrame, "Mount")
-        self._connectSkyMap()
         self._tk_root = tk_root
-        self.device = device
+        self.mount = device
         self.astrocam = astrocam
 
         mountFrame = ttk.Frame(self.widgetFrame)
@@ -35,85 +35,44 @@ class MountStatusWidget(BaseWidget):
         ttk.Button(gotoFrame, text='Goto...', command=self._goto).pack(side=tk.LEFT)
         ttk.Button(gotoFrame, text='Refine', command=self._refine).pack(side=tk.LEFT)
         gotoFrame.pack(side=tk.TOP)
-
         mountFrame.pack(fill=tk.X)
-        self.update()
 
-    def _connectSkyMap(self):
-        try:
-            if "mongod.exe" not in [p.name() for p in psutil.process_iter()]:
-                psutil.Popen([r"mongod.exe", "--dbpath", config['stardb']], shell=True, cwd=config['mongodir'])
-            self.skyMap = SkyMap()
-        except Exception as ex:
-            print(f"Failed to connect to SkyMap: {ex}")
-            self.skyMap = None
+    def _on_mount_position_update(self, event):
+        mountInfo = self._mount_svc.getMountInfo()
+        self.hdrInfo.set(mountInfo['status'])
+        self.radec.set(mountInfo['coord_txt'])
+        self.objname.set(mountInfo['object_name'])
 
-    def _update(self):
-        if self.device is None:
-            return False
-        if self.device.tracking:
-            self.hdrInfo.set("Tracking")
-        elif self.device.atpark:
-            self.hdrInfo.set("Parked")
-        elif self.device.slewing:
-            self.hdrInfo.set("Slewing")
-
-        coord = self.device.coordinates
-        coord_txt = coord.to_string("hmsdms")
-        self.radec.set(coord_txt)
-        if self.skyMap is not None:
-            self.objname.set(self.getName(coord))
-        else:
-            self.objname.set("")
-        return True
-
-    def _connect(self, device):
-        self.device = device
-        self.update()
-        self._tk_root.after(1000, self._poll_status)
-
-    def _poll_status(self):
-        self.update()
-        self._tk_root.after(1000, self._poll_status)
+    def _connect(self, mount, camera_svc):
+        self.mount = mount
+        self._mount_svc = MountService(self._tk_root, mount, camera_svc)
+        self._tk_root.bind(MountService.PositionUpdateEventName, self._on_mount_position_update)
 
     def _disconnect(self):
-        self.device = None
+        self.mount = None
         self.radec.set("")
         self.objname.set("")
-
-    def getName(self, coord: SkyCoord):
-        try:
-            if self.skyMap is None:
-                return ""
-            result = self.skyMap.findObjects(coord, limit=1)
-            return result
-        except Exception as ex:
-            print(f"Failed to get name from SkyMap: {ex}")
-            return ""
+        self._mount_svc.terminate()
 
     def _goto(self):
-        if self.skyMap is None:
-            return
-        goto_obj_sel = GotoObjectSelector(self, self.skyMap)
+        goto_obj_sel = GotoObjectSelector(self, self._mount_svc)
         goto_obj_sel.wait_window()
         if goto_obj_sel.selected_object:
             print(goto_obj_sel.selected_object)
             icrs_deg = goto_obj_sel.selected_object["icrs"]["deg"]
             coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
-            self.device.moveto(coord)
+            self._mount_svc.goto(coord)
         return
 
-    def _refine_callback(self, imageData: ImageData):
-        solver_result = PS.platesolve(imageData, self.device.coordinates)
-        if solver_result is None:
-            print("No solution")
-            return
-        dlg = RefineConfirm(self, solver_result, self.device)
+    def _confirm_ps(self, job, solver_result):
+        dlg = RefineConfirm(self, solver_result, self.mount)
         dlg.wait_window()
 
+    def _ps_failed(self, err):
+        print(f"Plate solving failed: {err}")
+
     def _refine(self):
-        self.astrocam.onImageReady.append(self._refine_callback)
-        self.astrocam.takeSnapshot()
+        self._mount_svc.refine(self._confirm_ps, self._ps_failed)
 
 
 class RefineConfirm(tk.Toplevel):
@@ -152,11 +111,11 @@ class RefineConfirm(tk.Toplevel):
 
 
 class GotoObjectSelector(tk.Toplevel):
-  
-  def __init__(self, parent, skymap) -> None:
+
+  def __init__(self, parent, mount_service) -> None:
     super().__init__(parent.widgetFrame.winfo_toplevel())
-    self.skymap = skymap
     self.selected_object = None
+    self._mount_svc = mount_service
     # set background color of window to bgcolor
     self.configure(bg="#200")
 
@@ -167,12 +126,32 @@ class GotoObjectSelector(tk.Toplevel):
 
     # Term Entry
     search_frame = ttk.Frame(dialog_frame)
-    ttk.Label(search_frame, text="Name:").pack(side=tk.LEFT)
-    self.name_search_entry = ttk.Entry(search_frame, width=30)
+
+    # M number Entry
+    m_row = ttk.Frame(search_frame)
+    ttk.Label(m_row, text="M:").pack(side=tk.LEFT)
+    self.m_search_entry = ttk.Entry(m_row, width=10)
+    self.m_search_entry.pack(side=tk.LEFT)
+    m_row.pack(side=tk.TOP, fill=tk.X, pady=2)
+
+    # NGC number Entry
+    ngc_row = ttk.Frame(search_frame)
+    ttk.Label(ngc_row, text="NGC:").pack(side=tk.LEFT)
+    self.ngc_search_entry = ttk.Entry(ngc_row, width=10)
+    self.ngc_search_entry.pack(side=tk.LEFT)
+    ngc_row.pack(side=tk.TOP, fill=tk.X, pady=2)
+
+    # Name Entry
+    name_row = ttk.Frame(search_frame)
+    ttk.Label(name_row, text="Name:").pack(side=tk.LEFT)
+    self.name_search_entry = ttk.Entry(name_row, width=30)
     self.name_search_entry.pack(side=tk.LEFT)
+    name_row.pack(side=tk.TOP, fill=tk.X, pady=2)
+
     # Search Button
     search_button = ttk.Button(search_frame, text="Search", command=self.search)
-    search_button.pack(side=tk.LEFT)
+    search_button.pack(side=tk.TOP, pady=4)
+
     search_frame.pack(side=tk.TOP, fill=tk.X)
 
     # Table
@@ -191,10 +170,15 @@ class GotoObjectSelector(tk.Toplevel):
 
   def search(self):
     results = []
-    term = self.name_search_entry.get()
-    if len(term) == 0:
+
+    if len(m := self.m_search_entry.get()) > 0:
+        results = self._mount_svc.search_catalog('M', m)
+    elif len(ngc := self.ngc_search_entry.get()) > 0:
+        results = self._mount_svc.search_catalog('NGC', ngc)
+    elif len(term := self.name_search_entry.get()) > 0:
+        results = self._mount_svc.searchName(term)
+    else:
         return
-    results = self.skymap.searchName(term)
 
     for i in self.table.get_children():
         self.table.delete(i)

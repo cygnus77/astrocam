@@ -83,10 +83,36 @@ class SkyMap:
     return [star for star in cursor]
   
 
+  def searchText(self, term):
+    cursor = self.db.stars.find(
+      filter={
+        '$text': {
+            '$search': term, 
+            '$caseSensitive': False
+        }
+      },
+      sort=list({
+          'mag': 1
+      }.items()),
+      limit=10)
+    return [star for star in cursor]
+
   def searchName(self, term):
     cursor = self.db.stars.find(
       filter={
-      'id': {'$regex': term, '$options': 'i'}
+        'id': {'$regex': term, '$options': 'i'}
+      },
+      sort=list({
+        'mag': 1
+      }.items()),
+      limit=10)
+    return [star for star in cursor]
+  
+
+  def search_catalog(self, cat_name, val):
+    cursor = self.db.stars.find(
+      filter={
+        cat_name: { '$regex': f"^{val}(?:,|$)" }
       },
       sort=list({
         'mag': 1
@@ -194,7 +220,10 @@ def test_plot():
 
 if __name__ == "__main__":
   with SkyMap() as sm:
-    matches = sm.searchName(r"M 57 NGC 6720")
+    matches = sm.searchText(r"M 57 NGC 6720")
+
+  # with SkyMap() as sm:
+  #   matches = sm.search_catalog('M', 57)
   obj = matches[0]
   icrs_deg = obj["icrs"]["deg"]
   coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
