@@ -1,4 +1,4 @@
-import random
+import asyncio
 import traceback
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -15,6 +15,7 @@ from multiprocessing import Queue
 import queue
 
 from app import AstroApp
+from image_processing_service import ImageProcessingService
 from ui.focuser_widget import FocuserWidget
 from ui.fwhm_widget import FWHMWidget
 from ui.histogram_plot import HistogramViewer
@@ -22,7 +23,16 @@ from ui.image_container import ImageViewer
 from ui.equipment_selector import selectEquipment
 from ui.mount_status_widget import MountStatusWidget
 
+from capture_service import CaptureService
+from astropy.coordinates import SkyCoord
+from astropy import units as u
+from astropy.coordinates import ICRS
 from astropy.io import fits
+from tkinter import filedialog
+from astro_tasks import parse_tasks_yaml_file
+from skymap.skymap import SkyMap
+
+from phd_ctrl import start_guiding, stop_guiding
 
 
 DEFAULT_NUM_EXPS = 5
@@ -50,6 +60,11 @@ class AstroCam(AstroApp):
         self.req_queue = Queue(1000)
         self.pollingCounter = 0
         self.onImageReady = [] # functions to call on image ready
+
+        self.task_list = []
+        self.task_executing = False
+
+        self.imageProcessingService = ImageProcessingService(self.root)
 
         ##############VARIABLES##############
         self.runStatus = tk.StringVar()
@@ -79,7 +94,7 @@ class AstroCam(AstroApp):
         # Image container
         imageViewerFrame = ttk.Frame(paned_window)
         imageViewerFrame.pack(fill=tk.BOTH, side=tk.LEFT, expand=True)
-        self.imageViewer = ImageViewer(imageViewerFrame)
+        self.imageViewer = ImageViewer(imageViewerFrame, self.root)
 
         # Control panel on right
         scrollableControlPanelFrame, controlPanelFrame = self.createScollableControlPanel(paned_window)
@@ -110,13 +125,13 @@ class AstroCam(AstroApp):
 
         # Focuser controls
         focusFrame = ttk.Frame(widgetsFrame)
-        self.focuserWidget = FocuserWidget(focusFrame, self, self.focuser)
+        self.focuserWidget = FocuserWidget(focusFrame, self.root, self.focuser, self.camera)
         self.root.bind("<Key>", self.focuserWidget.onkeypress)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Setup mount status
         mountStatusFrame = ttk.Frame(widgetsFrame)
-        self.mountStatusWidget = MountStatusWidget(mountStatusFrame, self, self.mount)
+        self.mountStatusWidget = MountStatusWidget(self.root, mountStatusFrame, self, self.mount)
         mountStatusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Star stats
@@ -129,11 +144,12 @@ class AstroCam(AstroApp):
 
         # Imaging controls
         imagingControlsFrame=ttk.Frame(scrollableControlPanelFrame, relief='raised')
-        self.setupControlBoard(imagingControlsFrame)
+        # self.setupControlBoard(imagingControlsFrame)
+        self.tabbed_controls(imagingControlsFrame)
         imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
         self.enableExpButtons(False)
-        self.root.after(1000, self.loadSplashImage)
+        # self.root.after(1000, self.loadSplashImage)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -152,12 +168,12 @@ class AstroCam(AstroApp):
         imageData = ImageData(raw=None, fname=image_fname, header=None)
         self.histoViewer.update(imageData)
         self.imageViewer.update(imageData)
-        imageData.computeStars()
-        if self.fwhmWidget.update(imageData):
-            if self.onImageReady:
-                fn = self.onImageReady.pop()
-                fn(imageData)
-            self.imageViewer.updateStars()
+        # imageData.computeStars()
+        # if self.fwhmWidget.update(imageData):
+        #     if self.onImageReady:
+        #         fn = self.onImageReady.pop()
+        #         fn(imageData)
+        #     self.imageViewer.updateStars()
 
 
     def createScollableControlPanel(self, parentFrame, width=350):
@@ -233,6 +249,55 @@ class AstroCam(AstroApp):
         ttk.Button(controlFrame,text="Stop", command=self.cancel).grid(row=1, column=2, padx=2, pady=2)
         controlFrame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
 
+    def taskControlBoard(self, frame):
+        # File selection
+        fileFrame = ttk.Frame(frame)
+        self.selected_file = tk.StringVar()
+        ttk.Button(fileFrame, text="Select File", command=self._select_file).pack(side=tk.LEFT, padx=5)
+        ttk.Label(fileFrame, textvariable=self.selected_file).pack(side=tk.LEFT, padx=5)
+        fileFrame.pack(fill=tk.X, side=tk.TOP, pady=5)
+
+        # Listbox to display lines
+        listboxFrame = ttk.Frame(frame)
+        self.file_listbox = tk.Listbox(listboxFrame, height=10, width=40)
+        self.file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(listboxFrame, orient="vertical", command=self.file_listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.file_listbox.config(yscrollcommand=scrollbar.set)
+        listboxFrame.pack(fill=tk.BOTH, side=tk.TOP, pady=5)
+
+        # Start/Stop buttons
+        btnFrame = ttk.Frame(frame)
+        self.startTaskBtn = ttk.Button(btnFrame, text="Start", command=self._start_task)
+        self.startTaskBtn.pack(side=tk.LEFT, padx=5)
+        self.stopTaskBtn = ttk.Button(btnFrame, text="Stop", command=self._stop_task)
+        self.stopTaskBtn.pack(side=tk.LEFT, padx=5)
+        btnFrame.pack(fill=tk.X, side=tk.TOP, pady=5)
+
+    def _select_file(self):
+        fname = filedialog.askopenfilename(title="Select file", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+        if fname:
+            self.selected_file.set(fname)
+            self.file_listbox.delete(0, tk.END)
+            self.task_list = parse_tasks_yaml_file(fname)
+            self.current_task_idx = -1
+            try:
+                for task in self.task_list:
+                    self.file_listbox.insert(tk.END, str(task))
+            except Exception as e:
+                self.runStatus.set(f"Error loading file: {e}")
+
+    def tabbed_controls(self, frame):
+        notebook = ttk.Notebook(frame)
+        controls_tab = ttk.Frame(notebook)
+        tasks_tab = ttk.Frame(notebook)
+        notebook.add(controls_tab, text="Controls")
+        notebook.add(tasks_tab, text="Tasks")
+        notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.setupControlBoard(controls_tab)
+        self.taskControlBoard(tasks_tab)
+
     # Observation settings
     def obs_popup(self):
         win = tk.Toplevel()
@@ -259,6 +324,73 @@ class AstroCam(AstroApp):
         ttk.Button(mainframe, text="OK", command=win.destroy).grid(row=row, column=1, padx=2, pady=2)
         mainframe.pack(fill=tk.BOTH, expand=True)
 
+
+    ##############  Tasks   ###############
+
+    def _start_task(self):
+        self.cancel()
+        self.runStatus.set("Tasks started")
+        self.current_task_idx = 0
+        self.task_executing = True
+        self.task_cancel_request = False
+
+        self.root.after_idle(self.exec_next_task)
+
+    def _stop_task(self):
+        self.task_cancel_request = True
+        self.cancel()
+
+    def exec_next_task(self):
+        if self.task_cancel_request:
+            self.runStatus.set("Tasks stopped")
+            return
+        task = self.task_list[self.current_task_idx]
+        self.current_task_idx += 1
+        self.runStatus.set(f"Task: {task}")
+        delay = 0
+        match task.action:
+            case "goto":
+                self.obsObject.set(task.params['object'])
+                with SkyMap() as sm:
+                    matches = sm.searchName(task.params['object'])
+                icrs_deg = matches[0]["icrs"]["deg"]
+                coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
+                self.mount.moveto(coord)
+                delay = 30 * 1000
+            case "start_phd":
+                self.start_phd()
+                delay = 5 * 1000
+            case "stop_phd":
+                self.stop_phd()
+                delay = 5 * 1000
+            case "take_exposures":
+                self.exp_time.set(task.params['exp'])
+                self.iso_number.set(task.params['iso'])
+                self.exposure_number.set(task.params['count'])
+                self.startExps()
+                return
+            case "park":
+                self.mount.park()
+            case "autofocus":
+                self.focuserWidget.refine()
+            case _:
+                raise RuntimeError("Unsuppoted action")
+
+        if self.current_task_idx < len(self.task_list):
+            self.root.after(delay, self.exec_next_task)
+        else:
+            self.runStatus.set(f"Tasks completed")
+            self.task_executing = False
+
+    def start_phd(self):
+        start_guiding()
+        return
+    
+    def stop_phd(self):
+        stop_guiding()
+        return
+
+
     ##############  Exposures   ###############
 
     def getExposureSettings(self):
@@ -280,6 +412,81 @@ class AstroCam(AstroApp):
         self.runStatus.set(f"Started sequence")
         job = self.getExposureSettings()
         self.startNextExposure(job)
+
+    def startNextExposure(self, job):
+        self.exposureProgress['value'] = 0
+        if not self.runningLiveView and not self.runningSimulator:
+            sno_file = Path('serial_no.txt')
+            if sno_file.exists():
+                serial_no = int(sno_file.read_text())
+            else:
+                serial_no = 0
+            sno_file.write_text(str(serial_no+1))
+
+            now = datetime.now()
+            now = now - timedelta(days=1 if now.hour<6 else 0)
+            output_dir = self.destDir / now.strftime("%Y%m%d")
+            if job['image_type'] == 'Light':
+                output_dir = output_dir / f"{job['object_name']}/Light"
+            else:
+                output_dir = output_dir / f"{job['image_type']}_{job['exp']}sec_{job['iso']}gain"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            job['output_fname'] = str(output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{self.camera.temperature}C.fit")
+        else:
+            job['output_fname'] = None
+        self.camera_svc.capture_image(job, on_success=self._on_exposure_completed, on_failure=self._on_exposure_failed)
+
+    def _on_capture_status_update(self, event):
+        if event.x >= 0:
+            self.exposureProgress['value'] = event.y
+        else:
+            self.exposureProgress['value'] = 0
+            print("ERROR")
+
+    def _on_exposure_completed(self, job, imageData):
+        # Start next exposure
+        self._start_next_exposure(job)
+
+        if job['image_type'] == 'Light' and not self.runningLiveView:
+            self.imageProcessingService.computeStars(imageData, lambda job, img: self._update_stars_fwhm(img))
+
+    def _on_exposure_failed(self, job, error):
+        self.exposureProgress['value'] = 0
+        print(f"Exposure failed: {error}")
+        self.endRunningExposures(f"Error: {error}")
+
+    def _start_next_exposure(self, job):
+        # Start next exposure
+        if self.runningLiveView:
+            if self.cancelJob:
+                self.endRunningExposures("Stopped Live view")
+            else:
+                self.root.after(0, lambda: self.startNextExposure(job))
+                return
+        elif self.runningExposures:
+            if self.cancelJob:
+                self.endRunningExposures("Cancelled")
+                return
+            else:
+                self.exposure_number.set(self.exposure_number.get() - 1)
+            if self.exposure_number.get() == 0:
+                self.endRunningExposures("Finished")
+                return
+            else:
+                # Execute after exposure steps
+                
+                # Trigger next exposure
+                self.root.after(0, lambda: self.startNextExposure(job))
+        else:
+            self.endRunningExposures("Finished")
+            return
+
+    def _update_stars_fwhm(self, imageData):
+        if self.fwhmWidget.update(imageData):
+            if self.onImageReady:
+                fn = self.onImageReady.pop()
+                fn(imageData)
+            self.imageViewer.updateStars()
 
     def takeSnapshot(self, iso_override=None, exp_override=None):
         print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
@@ -304,141 +511,16 @@ class AstroCam(AstroApp):
         job = self.getExposureSettings()
         self.startNextExposure(job)
 
-    def startNextExposure(self, job):
-        if self.camera is not None and self.camera.connected:
-            self.camera.gain = job['iso']
-            self.camera.start_exposure(job['exp'])
-            job['date_obs'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-            time_ms = int(job['exp'] * 1000)
-            if time_ms >= 1000:
-                self.root.after(1000, self.incrementProgress, job, time_ms)
-            else:
-                self.root.after(time_ms, self.endExposure, job)
-
-    def incrementProgress(self, job, time_left_ms):
-        total_time_ms = int(job['exp'] * 1000)
-        time_completed_ms = total_time_ms - time_left_ms
-        self.updateProgress(ProgressData(time_completed_ms / total_time_ms))
-        time_left_ms -= 1000
-        if time_left_ms >= 1000:
-            self.root.after(1000, self.incrementProgress, job, time_left_ms)
-        else:
-            self.root.after(time_left_ms, self.endExposure, job)
-
-    def endExposure(self, job):
-        self.updateProgress(ProgressData(1.0))
-        if self.camera is None or not self.camera.connected:
-            # Failed to download image 
-            # Catastrophe!!
-            print("Camera not connected!")
-            self.endRunningExposures("Camera not connected!")
-            return
-
-        if not self.camera.imageready:
-            self.root.after(250, self.endExposure, job)
-            return
-        img = self.camera.downloadimage()
-        temperature = self.camera.temperature
-
-        hdr = fits.Header({
-            'COMMENT': 'Anand Dinakar',
-            'OBJECT': job["object_name"],
-            'INSTRUME': self.camera.name,
-            'DATE-OBS': job['date_obs'],
-            'EXPTIME': job['exp'],
-            'CCD-TEMP': temperature,
-            'XPIXSZ': self.camera.pixelSize[0], #4.63,
-            'YPIXSZ': self.camera.pixelSize[1], #4.63,
-            'XBINNING': self.camera.binning,
-            'YBINNING': self.camera.binning,
-            'XORGSUBF': 0,
-            'YORGSUBF': 0,
-            'BZERO': 0,
-            'BSCALE': 1,
-            'EGAIN': self.camera.egain,
-            'FOCALLEN': job["focal_length"],
-            'SWCREATE': 'AstroCAM',
-            'SBSTDVER': 'SBFITSEXT Version 1.0',
-            'SNAPSHOT': 1,
-            'SET-TEMP': self.camera.set_temp,
-            'IMAGETYP': job['image_type'], #'Light Frame',
-            'SITELAT': job["latitude"],
-            'SITELONG': job["longitude"],
-            'GAIN': job['iso'],
-            'OFFSET': self.camera.offset,
-            'BAYERPAT': self.camera.sensor_type.name
-        })
-
-        if not self.runningLiveView and not self.runningSimulator:
-            sno_file = Path('serial_no.txt')
-            if sno_file.exists():
-                serial_no = int(sno_file.read_text())
-            else:
-                serial_no = 0
-            sno_file.write_text(str(serial_no+1))
-
-            now = datetime.now()
-            now = now - timedelta(days=1 if now.hour<6 else 0)
-            output_dir = self.destDir / now.strftime("%Y%m%d")
-            if job['image_type'] == 'Light':
-                output_dir = output_dir / f"{job['object_name']}/Light"
-            else:
-                output_dir = output_dir / f"{job['image_type']}_{job['exp']}sec_{job['iso']}gain"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_fname = output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{temperature}C.fit"
-            hdu = fits.PrimaryHDU(img, header=hdr)
-            hdu.writeto(output_fname)
-        else:
-            output_fname = None
-
-        # Start next exposure
-        self._start_next_exposure(job)
-
-        # Process last image & update UI
-        imageData = ImageData(img, output_fname, hdr)
-        self.histoViewer.update(imageData)
-        self.imageViewer.update(imageData)
-        
-        if job['image_type'] == 'Light' and not self.runningLiveView:
-            imageData.computeStars()
-            if self.fwhmWidget.update(imageData):
-                if self.onImageReady:
-                    fn = self.onImageReady.pop()
-                    fn(imageData)
-                self.imageViewer.updateStars()
-
-    def _start_next_exposure(self, job):
-        # Start next exposure
-        if self.runningLiveView:
-            if self.cancelJob:
-                self.endRunningExposures("Stopped Live view")
-            else:
-                self.startNextExposure(job)
-                return
-        elif self.runningExposures:
-            if self.cancelJob:
-                self.endRunningExposures("Cancelled")
-                return
-            else:
-                self.exposure_number.set(self.exposure_number.get() - 1)
-            if self.exposure_number.get() == 0:
-                self.endRunningExposures("Finished")
-                return
-            else:
-                # Execute after exposure steps
-                
-                # Trigger next exposure
-                self.startNextExposure(job)
-        else:
-            self.endRunningExposures("Finished")
-            return
-
     def endRunningExposures(self, msg):
+        self.exposureProgress['value'] = 0
         self.runningExposures = 0
         self.exposure_number.set(DEFAULT_NUM_EXPS)
         self.runStatus.set(msg)
         self.enableExpButtons(True)
-        self.updateProgress()
+
+        if self.task_executing:
+            self.root.after_idle(self.exec_next_task)
+
 
 
     def clearInputQueue(self):
@@ -458,11 +540,11 @@ class AstroCam(AstroApp):
         self.isoField["state"] = newstate
         self.numFramesField["state"] = newstate
 
-    def updateProgress(self, progressData=None):
-        if progressData is None:
-            self.exposureProgress['value'] = 0
-        else:
-            self.exposureProgress['value'] = int(progressData.progress*100)
+    # def updateProgress(self, progressData=None):
+    #     if progressData is None:
+    #         self.exposureProgress['value'] = 0
+    #     else:
+    #         self.exposureProgress['value'] = int(progressData.progress*100)
 
     def cancel(self):
         self.cancelJob = True
@@ -504,13 +586,6 @@ class AstroCam(AstroApp):
 
     ##################### Event Handlers #######################
 
-    def statusPolling(self):
-        if self.connected:
-            arr = [self.mountStatusWidget, self.focuserWidget]
-            arr[self.pollingCounter % len(arr)].update()
-            self.pollingCounter += 1
-            self.root.after(1000, self.statusPolling)
-
     def toggleconnect(self):
         if self.connected:
             if tk.messagebox.askokcancel("Disconnect", "Are you sure you want to disconnect?") is False:
@@ -536,17 +611,24 @@ class AstroCam(AstroApp):
         else:
             try:
                 self.mount, self.camera, self.focuser = selectEquipment(self.root)
-                if self.mount is None or self.camera is None or self.focuser is None:
+                if self.mount is None or self.camera is None:
                     return
                 subprocess.Popen(["python.exe", "./coolerapp.py", self.camera.name], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
                 self.runningSimulator = self.camera.isSimulator()
                 self.mountStatusWidget.connect(self.mount)
-                self.focuserWidget.connect(self.focuser)
+                if self.focuser:
+                    self.focuserWidget.connect(self.focuser, self.camera)
                 self.connected = True
                 self.connectBtn['image'] = self.off_icon
-                self.root.after_idle(self.statusPolling)
                 self.runStatus.set("Connected")
+
+                self.camera_svc = CaptureService(self.root, self.camera)
+                self.root.bind(CaptureService.CaptureStatusUpdateEventName, self._on_capture_status_update)
+                self.camera_svc.subscribe(self.histoViewer.update)
+                self.camera_svc.subscribe(self.imageViewer.update)
+
                 self.enableExpButtons(True)
+
             except Exception as err:
                 traceback.print_exc()
                 self.runStatus.set("Unable to connect")

@@ -130,6 +130,7 @@ class HistogramViewer(BaseWidget):
     self.auto_button.config(text="⚡️" if self.auto_stretch else "🛠️")
     if self.auto_stretch:
       self._stretch()
+      self.image_container.refresh()
 
   def _slider_toggle_lock(self):
     self.locked = not self.locked
@@ -143,9 +144,10 @@ class HistogramViewer(BaseWidget):
 
   def _slider_changed(self):
     if self.locked:
-      self.image_container.stretch(self.slider_low_val[0], self.slider_high_val[0])
+      self.image_container.set_stretch(self.slider_low_val[0], self.slider_high_val[0])
     else:
-      self.image_container.stretch(self.slider_low_val, self.slider_high_val)
+      self.image_container.set_stretch(self.slider_low_val, self.slider_high_val)
+    self.image_container.refresh()
 
   def _stretch(self):
     if self.red is None or self.green is None or self.blue is None:
@@ -154,14 +156,14 @@ class HistogramViewer(BaseWidget):
       a = []
       b = []
       for i, h in enumerate([self.red, self.green, self.blue]):
-          fit_g = fit_1dgausssian(h)
+          fit_g = fit_1dgausssian(h)[:3]
           if fit_g is None:
             raise ValueError("Gaussian fit error")
           ampl, avg, stddev = fit_g
           fwhm = abs(8 * np.log(2) * stddev)
-          a.append(max(int(avg - 4 * fwhm), 0))
-          b.append(min(int(avg + 7 * fwhm), 255))
-      self.image_container.stretch(a, b)
+          a.append(max(int(avg - 1.0 * fwhm), 1))
+          b.append(min(int(avg + 2.5 * fwhm), 255))
+      self.image_container.set_stretch(a, b)
 
       self.slider_low_val = [int(a) for a in a]
       self.slider_high_val = [int(b) for b in b]
@@ -204,8 +206,8 @@ class HistogramViewer(BaseWidget):
 if __name__ == "__main__":
   root = tk.Tk()
   mainFrame = ttk.Frame(root)
-  ctrl = HistogramViewer(mainFrame)
-  img = ImageData(None, fname=r"D:\Astro\20230319-M81M82_M101_M13\Light-M101-300sec\Light_ASIImg_300sec_Bin1_-9.4C_gain200_2023-03-20_023749_frame0026.fit", header={})
+  ctrl = HistogramViewer(mainFrame, None)
+  img = ImageData(None, fname=r"C:\code\astrocam\images\20250825\M 57 NGC 6720\Light\Light_00793_10.0sec_200gain_0.0C.fit", header={})
   ctrl.update(img)
   mainFrame.pack()
   root.mainloop()

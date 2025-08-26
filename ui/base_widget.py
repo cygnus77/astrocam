@@ -64,9 +64,9 @@ class BaseWidget:
     return result
 
 
-  def connect(self, device):
+  def connect(self, *args, **kwargs):
     try:
-      self._connect(device)
+      self._connect(*args, **kwargs)
       self.status = self.GREEN_CHECK
     except Exception as ex:
       print(f"Failed to connect to {self.widgetName}: {ex}")

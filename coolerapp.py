@@ -24,7 +24,7 @@ class CoolerApp(AstroApp):
     coolerFrame.pack(fill=tk.X, side=tk.TOP)
     paned_window.add(coolerFrame, weight=1)
     self.coolerWidget.connect(self.camera)
-    self.root.after_idle(self.statusPolling)
+    self.root.after(1000, self.statusPolling)
 
   def statusPolling(self):
     self.coolerWidget.update()
@@ -45,8 +45,6 @@ if __name__ == "__main__":
       return False
 
   exact_matches = [p for p in psutil.process_iter() if isCoolerProc(p)]
-  if len(exact_matches) > 1:
-    sys.exit(1)
-
-  coolerapp = CoolerApp(args.camera)
-  coolerapp.root.mainloop()
+  if len(exact_matches) == 1:
+    coolerapp = CoolerApp(args.camera)
+    coolerapp.root.mainloop()

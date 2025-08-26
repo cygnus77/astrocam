@@ -13,9 +13,10 @@ from settings import config
 
 
 class MountStatusWidget(BaseWidget):
-    def __init__(self, parentFrame, astrocam, device) -> None:
+    def __init__(self, tk_root, parentFrame, astrocam, device) -> None:
         super().__init__(parentFrame, "Mount")
         self._connectSkyMap()
+        self._tk_root = tk_root
         self.device = device
         self.astrocam = astrocam
 
@@ -69,6 +70,11 @@ class MountStatusWidget(BaseWidget):
     def _connect(self, device):
         self.device = device
         self.update()
+        self._tk_root.after(1000, self._poll_status)
+
+    def _poll_status(self):
+        self.update()
+        self._tk_root.after(1000, self._poll_status)
 
     def _disconnect(self):
         self.device = None

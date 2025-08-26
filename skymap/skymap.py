@@ -68,7 +68,7 @@ class SkyMap:
     self.cache[cache_key] = searchresult
     return searchresult
   
-  def searchName(self, term):
+  def searchTextName(self, term):
     cursor = self.db.stars.find(
       filter={
         '$text': {
@@ -78,6 +78,18 @@ class SkyMap:
       },
       sort=list({
           'mag': 1
+      }.items()),
+      limit=10)
+    return [star for star in cursor]
+  
+
+  def searchName(self, term):
+    cursor = self.db.stars.find(
+      filter={
+      'id': {'$regex': term, '$options': 'i'}
+      },
+      sort=list({
+        'mag': 1
       }.items()),
       limit=10)
     return [star for star in cursor]
@@ -159,7 +171,7 @@ def _test_separation():
     print(sm.findObjects(c1))
     print(sm.findObjects(c2))
 
-if __name__ == "__main__":
+def test_plot():
 
   import matplotlib.pyplot as plt
   # M101 RA: 14h04m00.0s
@@ -178,3 +190,12 @@ if __name__ == "__main__":
     plt.grid(True)
     fig.show()
     while not fig.waitforbuttonpress(): pass
+
+
+if __name__ == "__main__":
+  with SkyMap() as sm:
+    matches = sm.searchName(r"M 57 NGC 6720")
+  obj = matches[0]
+  icrs_deg = obj["icrs"]["deg"]
+  coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
+  print(obj, coord)

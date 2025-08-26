@@ -34,6 +34,10 @@ class AstroApp:
     self.root.style.configure("Horizontal.TSlider", background=bgcolor, bordercolor=bordercolor, arrowcolor=fgcolor, troughcolor=bgcolor)
     self.root.style.configure("TCheckbutton", foreground=fgcolor, background=bgcolor, font=self.EntryFont)
 
+    self.root.style.configure('TNotebook', background=bgcolor, borderwidth=0)
+    self.root.style.configure('TNotebook.Tab', background=inactivebgcolor, foreground=fgcolor, font=('TkDefaultFont', 10, 'bold'))
+    self.root.style.map('TNotebook.Tab',  background=[('selected', bgcolor3)], foreground=[('selected', 'white')])
+
     self.root.style.map("Vertical.TScrollbar",
         background=[("active", bgcolor),("!active", inactivebgcolor),("pressed",highlightedcolor)])
     self.root.style.map("Horizontal.TScrollbar",

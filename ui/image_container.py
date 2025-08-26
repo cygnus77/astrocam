@@ -13,18 +13,22 @@ import pandas as pd
 from image_data import ImageData
 from ui.base_widget import BaseWidget
 from scipy.interpolate import interp1d, PchipInterpolator
+from image_processing_service import ImageProcessingService
 
 
 class ImageViewer(BaseWidget):
 
-  def __init__(self, parentFrame):
+  def __init__(self, parentFrame, tk_root):
     super().__init__(parentFrame, "RGB Image", collapsed=False, expand=True)
+    self.tk_root = tk_root
     self.image = None
     self.imageScale = 1.0
     self.highlights = None
     self.scaledImg = None
     self.starHotSpots = {}
     self.onTargetStarChanged = None
+
+    self.imageProcessingService = ImageProcessingService(tk_root)
 
     # Image container
     self.imageCanvas = tk.Canvas(self.widgetFrame, background="#200")
@@ -98,7 +102,7 @@ class ImageViewer(BaseWidget):
       for i in np.arange(0, 256)]).astype("uint8")
     self.gammaStr.set(f"{self.gamma.get():.1f}")
 
-  def stretch(self, a1, a2):
+  def set_stretch(self, a1, a2):
     if isinstance(a1, int):
       self.gamma.set(1.0)
       self.gammaStr.set("1.0")
@@ -115,13 +119,15 @@ class ImageViewer(BaseWidget):
         low = min(a1[i], a2[i])
         spline = PchipInterpolator([0, low, high, 256], [0, 0, 255, 256])
         self.gamma_table[:, i] = spline(np.arange(256))
+
+  def refresh(self):
     self._refreshDisplay()
 
   def onGammaChange(self, ev):
     self.updateGammaTable()
     self._refreshDisplay()
 
-  def _scaleImage(self):
+  def _scaleImage(self, after):
     if self.image is None:
       return
     imgCanvasWidth, imgCanvasHeight = self.imageCanvas.winfo_width(), self.imageCanvas.winfo_height()
@@ -137,46 +143,24 @@ class ImageViewer(BaseWidget):
     self.scaleX = (w*self.imageScale) / self.image.rgb24.shape[1]
     self.scaleY = (h*self.imageScale) / self.image.rgb24.shape[0]
 
-    scaledImg = cv2.resize(self.image.rgb24, dsize=(int(w*self.imageScale), int(h*self.imageScale)), interpolation=cv2.INTER_LINEAR)
-    if scaledImg.dtype == np.uint16:
-      scaledImg = (scaledImg / 256).astype(np.uint8)
-    self.scaledImg = scaledImg
-    # print("scaled image size: ", scaledImg.shape[1], scaledImg.shape[0])
+    def after_resize(j, output):
+      scaledImg, imageObject = output
+      img = self.scaledImg = scaledImg
+      h, w = img.shape[:2]
+      self._updatePhotoImage(imageObject, w, h, after)
+
+    self.imageProcessingService.resize(self.image, w, h, self.imageScale, self.gamma_table, on_success=after_resize)
     
 
-  def _refreshDisplay(self):
+  def _refreshDisplay(self, after=None):
     if self.scaledImg is None:
       return
     img = self.scaledImg
-    # Histogram equalize
-    # e_r = cv2.equalizeHist(img[:,:,0])
-    # e_g = cv2.equalizeHist(img[:,:,1])
-    # e_b = cv2.equalizeHist(img[:,:,2])
-    # img = np.stack([e_r, e_g, e_b], axis=2)
-
-    # e_r = self.clahe.apply(img[:,:,0])
-    # e_g = self.clahe.apply(img[:,:,1])
-    # e_b = self.clahe.apply(img[:,:,2])
-    # img = np.stack([e_r, e_g, e_b], axis=2)
-
-    # img = cv2.convertScaleAbs(img, alpha=2.0, beta=50)
-
-    if len(self.gamma_table.shape) == 2:
-      r = cv2.LUT(img[:, :, 0], self.gamma_table[:, 0])
-      g = cv2.LUT(img[:, :, 1], self.gamma_table[:, 1])
-      b = cv2.LUT(img[:, :, 2], self.gamma_table[:, 2])
-      img = np.stack([r, g, b], axis=-1)
-    else:
-      img = cv2.LUT(img, self.gamma_table)
-
     h, w = img.shape[:2]
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    self.imageObject = ImageTk.PhotoImage(image=Image.fromarray(img))
-    # OR, 
-    # ppm_header = f'P6 {w} {h} 255 '.encode()
-    # data = ppm_header + img.tobytes()
-    # self.imageObject = ImageTk.PhotoImage(width=w, height=h, data=data, format='PPM')
+    self.imageProcessingService.stretch_to_photoimage(img, self.gamma_table, on_success=lambda j, imageObject: self._updatePhotoImage(imageObject, w, h, after))
 
+  def _updatePhotoImage(self, imageObject, w, h, after=None):
+    self.imageObject = imageObject
     c_x, c_y = w//2, h//2
     if self.image_container is None:
       self.image_container = self.imageCanvas.create_image((0,0), image=self.imageObject, anchor='nw')
@@ -186,6 +170,8 @@ class ImageViewer(BaseWidget):
     else:
       self.imageCanvas.itemconfig(self.image_container, image=self.imageObject)
       self.imageCanvas.moveto('crosshairs', c_x-25, c_y-25)
+    if after is not None:
+      self.tk_root.after_idle(after)
 
   def _updateZoom(self, new_scale):
       old_scale = self.imageScale
@@ -199,41 +185,31 @@ class ImageViewer(BaseWidget):
       center_y = int(center_y * new_scale / old_scale)
       return max(0, center_x - vw/2), max(0, center_y - vh/2)
 
+  def after_scale(self, scroll_xpos, scroll_ypos):
+    self.updateStars()
+    self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+    w, h = self.scaledImg.shape[1], self.scaledImg.shape[0]
+    self.imageCanvas.xview_moveto(scroll_xpos/w)
+    self.imageCanvas.yview_moveto(scroll_ypos/h)
+
   def zoomin(self):
     if self.imageScale < 5:
       scroll_xpos, scroll_ypos = self._updateZoom(self.imageScale + 0.5)
-      self._scaleImage()
-      self._refreshDisplay()
-      self.updateStars()
-      self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-      w, h = self.scaledImg.shape[1], self.scaledImg.shape[0]
-      self.imageCanvas.xview_moveto(scroll_xpos/w)
-      self.imageCanvas.yview_moveto(scroll_ypos/h)
-
+      self._scaleImage(after=lambda: self.after_scale(scroll_xpos, scroll_ypos))
 
   def zoomout(self):
     if self.imageScale > 0.5:
       scroll_xpos, scroll_ypos = self._updateZoom(self.imageScale - 0.5)
-      self._scaleImage()
-      self._refreshDisplay()
-      self.updateStars()
-      self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
-      w, h = self.scaledImg.shape[1], self.scaledImg.shape[0]
-      self.imageCanvas.xview_moveto(scroll_xpos/w)
-      self.imageCanvas.yview_moveto(scroll_ypos/h)
-
+      self._scaleImage(after=lambda: self.after_scale(scroll_xpos, scroll_ypos))
 
   def resize(self, event):
-    self._scaleImage()
-    self._refreshDisplay()
-    self.updateStars()
     self.imageCanvas.configure(scrollregion=self.imageCanvas.bbox("all"))
+    self._scaleImage(after=self.updateStars)
 
   def _update(self, imgData: ImageData):
     self.image = imgData
     self.imageLoadTime = time.time()
-    self._scaleImage()
-    self._refreshDisplay()
+    self._scaleImage(after=self.updateStars)
     return True
 
   def updateStars(self):
