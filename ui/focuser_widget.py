@@ -90,6 +90,6 @@ class FocuserWidget(BaseWidget):
       return True
     return False
 
-  def refine(self):
-    self.focuser_svc.autofocus(on_failure=self._on_focuser_error)
+  def refine(self, on_success):
+    self.focuser_svc.autofocus(on_failure=self._on_focuser_error, on_success=on_success)
 

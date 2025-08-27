@@ -81,6 +81,9 @@ class ImageViewer(BaseWidget):
       self.imageCanvas.after(1000, updateAgeLabel)
     updateAgeLabel()
 
+    imageObject = ImageTk.PhotoImage(image=Image.open(Path(__file__).parent / "splash.jpg"))
+    tk_root.after_idle(self._updatePhotoImage, imageObject, 1024, 768, None)
+
   def _onMouseWheel(self, event):
       if event.delta > 0:
           self.zoomin()

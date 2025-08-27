@@ -2,7 +2,7 @@ import asyncio
 import traceback
 import tkinter as tk
 import tkinter.ttk as ttk
-
+import os
 from datetime import datetime, timedelta
 import time
 from pathlib import Path
@@ -59,7 +59,6 @@ class AstroCam(AstroApp):
         self.image_queue = Queue(1000)  
         self.req_queue = Queue(1000)
         self.pollingCounter = 0
-        self.onImageReady = [] # functions to call on image ready
 
         self.task_list = []
         self.task_executing = False
@@ -149,7 +148,6 @@ class AstroCam(AstroApp):
         imagingControlsFrame.pack(fill=tk.BOTH, side=tk.BOTTOM)
 
         self.enableExpButtons(False)
-        # self.root.after(1000, self.loadSplashImage)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -158,22 +156,6 @@ class AstroCam(AstroApp):
             if self.runningExposures or self.runningLiveView:
                 self.cancel()
             self.root.destroy()
-
-
-    def loadSplashImage(self):
-        # img_root = Path(r"C:\images\plate-solving-samples")
-        # img_dir = random.choice([d for d in img_root.iterdir() if d.is_dir()])
-        # image_fname = str(random.choice(list(img_dir.glob("**/*.fit"))))
-        image_fname = r"splash.fit"
-        imageData = ImageData(raw=None, fname=image_fname, header=None)
-        self.histoViewer.update(imageData)
-        self.imageViewer.update(imageData)
-        # imageData.computeStars()
-        # if self.fwhmWidget.update(imageData):
-        #     if self.onImageReady:
-        #         fn = self.onImageReady.pop()
-        #         fn(imageData)
-        #     self.imageViewer.updateStars()
 
 
     def createScollableControlPanel(self, parentFrame, width=350):
@@ -277,13 +259,13 @@ class AstroCam(AstroApp):
     def _select_file(self):
         fname = filedialog.askopenfilename(title="Select file", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
         if fname:
-            self.selected_file.set(fname)
+            self.selected_file.set(os.path.basename(fname))
             self.file_listbox.delete(0, tk.END)
             self.task_list = parse_tasks_yaml_file(fname)
             self.current_task_idx = -1
             try:
-                for task in self.task_list:
-                    self.file_listbox.insert(tk.END, str(task))
+                for i, task in enumerate(self.task_list):
+                    self.file_listbox.insert(tk.END, f"{i+1}. {task}")
             except Exception as e:
                 self.runStatus.set(f"Error loading file: {e}")
 
@@ -346,23 +328,31 @@ class AstroCam(AstroApp):
             return
         task = self.task_list[self.current_task_idx]
         self.current_task_idx += 1
-        self.runStatus.set(f"Task: {task}")
+        self.runStatus.set(f"Task {self.current_task_idx}: {task}")
         delay = 0
         match task.action:
             case "goto":
-                self.obsObject.set(task.params['object'])
-                with SkyMap() as sm:
-                    matches = sm.searchName(task.params['object'])
+                if 'cat' in task.params:
+                    cat = task.params['cat']
+                    id = task.params['id']
+                    with SkyMap() as sm:
+                        matches = sm.search_catalog(cat, id)
+                else:
+                    self.obsObject.set(task.params['object'])
+                    with SkyMap() as sm:
+                        matches = sm.searchText(task.params['object'])
+                if matches == None or len(matches) == 0:
+                    self._stop_task()
                 icrs_deg = matches[0]["icrs"]["deg"]
                 coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
                 self.mount.moveto(coord)
-                delay = 30 * 1000
+                delay = 30
             case "start_phd":
-                self.start_phd()
-                delay = 5 * 1000
+                # start_guiding()
+                delay = 5
             case "stop_phd":
-                self.stop_phd()
-                delay = 5 * 1000
+                # stop_guiding()
+                delay = 5
             case "take_exposures":
                 self.exp_time.set(task.params['exp'])
                 self.iso_number.set(task.params['iso'])
@@ -372,23 +362,23 @@ class AstroCam(AstroApp):
             case "park":
                 self.mount.park()
             case "autofocus":
-                self.focuserWidget.refine()
+                self.focuserWidget.refine(lambda j, r: self._increment_task(5))
+                return
+            case "platesolve":
+                self.mountStatusWidget.platesolve(lambda j, r: self._increment_task(5))
+                return
             case _:
                 raise RuntimeError("Unsuppoted action")
+            
+        self._increment_task(delay)
 
+    def _increment_task(self, delay=0):
         if self.current_task_idx < len(self.task_list):
-            self.root.after(delay, self.exec_next_task)
+            self.root.after(delay * 1000, self.exec_next_task)
         else:
             self.runStatus.set(f"Tasks completed")
             self.task_executing = False
 
-    def start_phd(self):
-        start_guiding()
-        return
-    
-    def stop_phd(self):
-        stop_guiding()
-        return
 
 
     ##############  Exposures   ###############
@@ -483,9 +473,6 @@ class AstroCam(AstroApp):
 
     def _update_stars_fwhm(self, imageData):
         if self.fwhmWidget.update(imageData):
-            if self.onImageReady:
-                fn = self.onImageReady.pop()
-                fn(imageData)
             self.imageViewer.updateStars()
 
     def takeSnapshot(self, iso_override=None, exp_override=None):
@@ -540,12 +527,6 @@ class AstroCam(AstroApp):
         self.isoField["state"] = newstate
         self.numFramesField["state"] = newstate
 
-    # def updateProgress(self, progressData=None):
-    #     if progressData is None:
-    #         self.exposureProgress['value'] = 0
-    #     else:
-    #         self.exposureProgress['value'] = int(progressData.progress*100)
-
     def cancel(self):
         self.cancelJob = True
         try:
@@ -595,6 +576,7 @@ class AstroCam(AstroApp):
 
             self.connectBtn['image'] = self.on_icon
             self.connected = False
+            self.camera_svc.terminate()
             if self.mount:
                 self.mount.close()
             if self.camera:

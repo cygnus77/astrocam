@@ -74,6 +74,14 @@ class MountStatusWidget(BaseWidget):
     def _refine(self):
         self._mount_svc.refine(self._confirm_ps, self._ps_failed)
 
+    def platesolve(self, on_completion):
+        def apply_ps(job, solver_result):
+            self._tk_root.after_idle(lambda: self._mount_svc.syncto(
+                                        solver_result['center'], 
+                                        on_success=on_completion, 
+                                        on_failure=self._ps_failed))
+        self._mount_svc.refine(apply_ps, self._ps_failed)
+
 
 class RefineConfirm(tk.Toplevel):
     def __init__(self, parent, solver_result, device) -> None:
