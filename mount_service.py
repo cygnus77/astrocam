@@ -85,6 +85,9 @@ class MountService(ServiceBase):
     
     def syncto(self, coord: SkyCoord, on_success=None, on_failure=None):
         return self.start_job({'cmd': 'syncto', 'coord': coord}, on_success=on_success, on_failure=on_failure)
+    
+    def park(self, on_success=None, on_failure=None):
+        return self.start_job({'cmd': 'park'}, on_success=on_success, on_failure=on_failure)
 
     def searchName(self, term):
         return self._skyMap.searchText(term) if self._skyMap else []
@@ -104,6 +107,9 @@ class MountService(ServiceBase):
 
             elif self.job['cmd'] == 'syncto':
                 self._mount.syncto(self.job['coord'])
+
+            elif self.job['cmd'] == 'park':
+                self._mount.park()
 
             elif self.job['cmd'] == 'refine':
                 # Take snapshot

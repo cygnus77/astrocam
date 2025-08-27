@@ -1,5 +1,6 @@
 import tkinter as tk
 import tkinter.ttk as ttk
+from tkinter import messagebox
 from mount_service import MountService
 from skymap.skymap import SkyMap
 import skymap.platesolver as PS
@@ -32,7 +33,7 @@ class MountStatusWidget(BaseWidget):
         statusFrame.pack(side=tk.TOP)
 
         gotoFrame = ttk.Frame(mountFrame)
-        ttk.Button(gotoFrame, text='Goto...', command=self._goto).pack(side=tk.LEFT)
+        ttk.Button(gotoFrame, text='Goto...', command=self._select_goto_object).pack(side=tk.LEFT)
         ttk.Button(gotoFrame, text='Refine', command=self._refine).pack(side=tk.LEFT)
         gotoFrame.pack(side=tk.TOP)
         mountFrame.pack(fill=tk.X)
@@ -54,15 +55,20 @@ class MountStatusWidget(BaseWidget):
         self.objname.set("")
         self._mount_svc.terminate()
 
-    def _goto(self):
+    def _select_goto_object(self):
         goto_obj_sel = GotoObjectSelector(self, self._mount_svc)
         goto_obj_sel.wait_window()
         if goto_obj_sel.selected_object:
-            print(goto_obj_sel.selected_object)
-            icrs_deg = goto_obj_sel.selected_object["icrs"]["deg"]
-            coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
-            self._mount_svc.goto(coord)
+            self.goto_object(goto_obj_sel.selected_object)
         return
+    
+    def goto_object(self, obj):
+        icrs_deg = obj["icrs"]["deg"]
+        coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
+        self._mount_svc.goto(coord)
+
+    def park(self):
+        self._mount_svc.park()
 
     def _confirm_ps(self, job, solver_result):
         dlg = RefineConfirm(self, solver_result, self.mount)
@@ -70,17 +76,18 @@ class MountStatusWidget(BaseWidget):
 
     def _ps_failed(self, err):
         print(f"Plate solving failed: {err}")
+        messagebox.showwarning("Warning", f"Plate solving failed: {err}")
 
     def _refine(self):
         self._mount_svc.refine(self._confirm_ps, self._ps_failed)
 
-    def platesolve(self, on_completion):
+    def platesolve(self, on_completion, on_failure):
         def apply_ps(job, solver_result):
             self._tk_root.after_idle(lambda: self._mount_svc.syncto(
                                         solver_result['center'], 
-                                        on_success=on_completion, 
-                                        on_failure=self._ps_failed))
-        self._mount_svc.refine(apply_ps, self._ps_failed)
+                                        on_success=on_completion,
+                                        on_failure=on_failure))
+        self._mount_svc.refine(on_success=apply_ps, on_failure=on_failure)
 
 
 class RefineConfirm(tk.Toplevel):

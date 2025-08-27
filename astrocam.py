@@ -315,7 +315,6 @@ class AstroCam(AstroApp):
         self.current_task_idx = 0
         self.task_executing = True
         self.task_cancel_request = False
-
         self.root.after_idle(self.exec_next_task)
 
     def _stop_task(self):
@@ -325,52 +324,64 @@ class AstroCam(AstroApp):
     def exec_next_task(self):
         if self.task_cancel_request:
             self.runStatus.set("Tasks stopped")
+            self.task_executing = False
             return
         task = self.task_list[self.current_task_idx]
         self.current_task_idx += 1
         self.runStatus.set(f"Task {self.current_task_idx}: {task}")
-        delay = 0
-        match task.action:
-            case "goto":
-                if 'cat' in task.params:
-                    cat = task.params['cat']
-                    id = task.params['id']
-                    with SkyMap() as sm:
-                        matches = sm.search_catalog(cat, id)
-                else:
-                    self.obsObject.set(task.params['object'])
-                    with SkyMap() as sm:
-                        matches = sm.searchText(task.params['object'])
-                if matches == None or len(matches) == 0:
-                    self._stop_task()
-                icrs_deg = matches[0]["icrs"]["deg"]
-                coord = SkyCoord(icrs_deg["ra"] * u.degree, icrs_deg["dec"] * u.degree, frame=ICRS)
-                self.mount.moveto(coord)
-                delay = 30
-            case "start_phd":
-                # start_guiding()
-                delay = 5
-            case "stop_phd":
-                # stop_guiding()
-                delay = 5
-            case "take_exposures":
-                self.exp_time.set(task.params['exp'])
-                self.iso_number.set(task.params['iso'])
-                self.exposure_number.set(task.params['count'])
-                self.startExps()
-                return
-            case "park":
-                self.mount.park()
-            case "autofocus":
-                self.focuserWidget.refine(lambda j, r: self._increment_task(5))
-                return
-            case "platesolve":
-                self.mountStatusWidget.platesolve(lambda j, r: self._increment_task(5))
-                return
-            case _:
-                raise RuntimeError("Unsuppoted action")
-            
-        self._increment_task(delay)
+
+        try:
+            match task.action:
+                case "goto":
+                    if 'cat' in task.params:
+                        cat = task.params['cat']
+                        id = task.params['id']
+                        with SkyMap() as sm:
+                            matches = sm.search_catalog(cat, id)
+                    else:
+                        self.obsObject.set(task.params['object'])
+                        with SkyMap() as sm:
+                            matches = sm.searchText(task.params['object'])
+                    if matches == None or len(matches) == 0:
+                        raise ValueError(f"Object not found: {task.params}")
+                    else:
+                        self.mountStatusWidget.goto_object(matches[0])
+                        self._increment_task(delay=30)
+                case "start_phd":
+                    start_guiding()
+                    self._increment_task(delay=5)
+                case "stop_phd":
+                    stop_guiding()
+                    self._increment_task(delay=5)
+                case "take_exposures":
+                    self.exp_time.set(task.params['exp'])
+                    self.iso_number.set(task.params['iso'])
+                    self.exposure_number.set(task.params['count'])
+                    self.startExps()
+                    return
+                case "park":
+                    self.mountStatusWidget.park()
+                    self._increment_task(delay=10)
+                case "autofocus":
+                    def on_auto_focus_fail(job, error):
+                        self.runStatus.set(f"Auto focus failed: {error}")
+                        self._increment_task(5)
+                    self.focuserWidget.refine(on_completion=lambda j, r: self._increment_task(5),
+                                              on_failure=on_auto_focus_fail)
+                    return
+                case "platesolve":
+                    def on_plate_solve_fail(job, error):
+                        self.runStatus.set(f"Plate solving failed: {error}")
+                        self._increment_task(5)
+                    self.mountStatusWidget.platesolve(on_completion=lambda j, r: self._increment_task(5),
+                                                      on_failure=on_plate_solve_fail)
+                    return
+                case _:
+                    raise ValueError(f"Unknown task action: {task.action}")
+        except Exception as e:
+            self.runStatus.set(f"Tasks stopped: {e}")
+            self.task_executing = False
+            self.cancel()
 
     def _increment_task(self, delay=0):
         if self.current_task_idx < len(self.task_list):
