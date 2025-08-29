@@ -1,6 +1,8 @@
 import numpy as np
-# import scipy.optimize as opt
+import scipy.optimize as opt
 from scipy.optimize import curve_fit
+import logging
+
 
 def twoD_GaussianScaledAmp(pos, xo, yo, sigma_x, sigma_y, amplitude, offset):
     """Function to fit, returns 2D gaussian function as 1D array"""
@@ -99,7 +101,7 @@ def fit_1dgausssian(arr):
         else:
             return None
     except Exception as e:
-        print(f"Curve fit failed: {e}")
+        logging.error(f"Curve fit failed: {e}")
         return None
 
 def fwhm1d(arr):
@@ -191,7 +193,7 @@ def fitgaussian2d(data, circular=False, centered=False):
     p0 = params[:5]
     bounds = (
         [0, 0, 0, 1e-3, 1e-3],  # lower bounds
-        [float(np.max(data))*2, data.shape[0], data.shape[1], data.shape[0], data.shape[1]]  # upper bounds
+        [float(np.max(data))*2, data.shape[0], data.shape[1], data.shape[0]*2, data.shape[1]*2]  # upper bounds
     )
     popt, _ = curve_fit(model, (X, Y), data.ravel(), p0=p0, bounds=bounds, maxfev=5000)
     if circular:

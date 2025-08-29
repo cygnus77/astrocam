@@ -3,6 +3,8 @@ import zwoasi as asi
 from enum import IntEnum
 import time
 from pathlib import Path
+import logging
+
 
 library_file = Path(__file__).parent/"lib/x64/ASICamera2.dll"
 asi.init(library_file=str(library_file))
@@ -28,19 +30,17 @@ class ASINativeCamera():
 
     self.camera = asi.Camera(id)
     self.camera_info = self.camera.get_camera_property()
-    print("Camera info:")
+    logging.info("Camera info:")
     for k,v in self.camera_info.items():
-      print('\t', k, v)
-    print()
-    print("Controls:")
-    print('')
-    print('Camera controls:')
+      logging.info('\t%s: %s', k, v)
+    logging.info("Controls:")
+    logging.info('Camera controls:')
     controls = self.camera.get_controls()
     for cn in sorted(controls.keys()):
-        print('    %s:' % cn)
+        logging.info('    %s:', cn)
         for k in sorted(controls[cn].keys()):
-            print('        %s: %s' % (k, repr(controls[cn][k])))
-    print()
+            logging.info('        %s: %s', k, repr(controls[cn][k]))
+
     self._connected = True
 
     # Defaults
@@ -244,11 +244,11 @@ if __name__ == "__main__":
   from tqdm import tqdm
   import numpy as np
   camera = ASINativeCamera(0)
-  print(camera.connected)
-  print(camera.description)
-  print(camera.sensor_type)
-  print(camera.state)
-  print(camera.cooler)
+  logging.info("Camera connected: %s", camera.connected)
+  logging.info("Camera description: %s", camera.description)
+  logging.info("Camera sensor type: %s", camera.sensor_type)
+  logging.info("Camera state: %s", camera.state)
+  logging.info("Camera cooler status: %s", camera.cooler)
   camera.gain = 121
   camera.offset = 30
   durationSec = 0.05

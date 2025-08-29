@@ -15,11 +15,9 @@ from settings import config
 
 
 class MountStatusWidget(BaseWidget):
-    def __init__(self, tk_root, parentFrame, astrocam, device) -> None:
+    def __init__(self, tk_root, parentFrame) -> None:
         super().__init__(parentFrame, "Mount")
         self._tk_root = tk_root
-        self.mount = device
-        self.astrocam = astrocam
 
         mountFrame = ttk.Frame(self.widgetFrame)
         statusFrame = ttk.Frame(mountFrame)
@@ -45,12 +43,10 @@ class MountStatusWidget(BaseWidget):
         self.objname.set(mountInfo['object_name'])
 
     def _connect(self, mount, camera_svc):
-        self.mount = mount
         self._mount_svc = MountService(self._tk_root, mount, camera_svc)
         self._tk_root.bind(MountService.PositionUpdateEventName, self._on_mount_position_update)
 
     def _disconnect(self):
-        self.mount = None
         self.radec.set("")
         self.objname.set("")
         self._mount_svc.terminate()
@@ -71,10 +67,15 @@ class MountStatusWidget(BaseWidget):
         self._mount_svc.park()
 
     def _confirm_ps(self, job, solver_result):
-        dlg = RefineConfirm(self, solver_result, self.mount)
+        dlg = RefineConfirm(self, solver_result, self._mount_svc)
         dlg.wait_window()
+        if dlg.success:
+            self._tk_root.after_idle(lambda: self._mount_svc.syncto(
+                                        dlg.result, 
+                                        on_success=lambda job, res: messagebox.showinfo("Info", f"Synced to {dlg.result.to_string('hmsdms')}"),
+                                        on_failure=lambda job, err: messagebox.showwarning("Warning", f"Sync failed: {err}")))
 
-    def _ps_failed(self, err):
+    def _ps_failed(self, job, err):
         print(f"Plate solving failed: {err}")
         messagebox.showwarning("Warning", f"Plate solving failed: {err}")
 
@@ -91,7 +92,7 @@ class MountStatusWidget(BaseWidget):
 
 
 class RefineConfirm(tk.Toplevel):
-    def __init__(self, parent, solver_result, device) -> None:
+    def __init__(self, parent, solver_result, svc) -> None:
         super().__init__(parent.widgetFrame.winfo_toplevel())
         # set background color of window to bgcolor
         self.configure(bg="#200")
@@ -114,16 +115,16 @@ class RefineConfirm(tk.Toplevel):
                 self.table.insert('', 'end', text=str(idx), values=(result_key, solver_result[result_key]))
 
         if solver_result['solved']:
-            def syncandclose():
-                device.syncto(solver_result['center'])
-                self.destroy()
-
+            self.result = solver_result['center']
             # Select Button
-            select_button = ttk.Button(dialog_frame, text="Sync", command=syncandclose)
+            select_button = ttk.Button(dialog_frame, text="Sync", command=self.syncandclose)
             select_button.pack(side=tk.BOTTOM)
 
         dialog_frame.pack(fill=tk.BOTH, expand=True)
 
+    def syncandclose(self):
+        self.success=True
+        self.destroy()
 
 class GotoObjectSelector(tk.Toplevel):
 

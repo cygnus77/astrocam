@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.ticker as ticker
 from fwhm.fwhm import fit_1dgausssian
+import logging
 
 
 class HistogramViewer(BaseWidget):
@@ -169,7 +170,7 @@ class HistogramViewer(BaseWidget):
       self.slider_high_val = [int(b) for b in b]
       self._update_slider_positions()
     except ValueError as err:
-      print(err)
+      logging.error(err)
       pass
 
   def _update(self, img: ImageData):

@@ -9,6 +9,9 @@ from collections import defaultdict
 import math
 from scipy.spatial import Delaunay
 from .star_finder import StarFinder
+import logging
+
+
 class StarMatcher:
 
     def matchStars(self, df_ref: pd.DataFrame, df_tgt: pd.DataFrame, 
@@ -42,7 +45,7 @@ class StarMatcher:
         if len(tri_ref) == 0 or len(tri_tgt) == 0:
             return None
 
-        # print(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
+        logging.info(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
         result['ref_triangles'] = len(tri_ref)
         result['tgt_triangles'] = len(tri_tgt)
 
@@ -101,10 +104,9 @@ class StarMatcher:
                     # expect unordered star indices s1, s2, s3
                     for a,b in product([ref.s1, ref.s2, ref.s3], [tgt.s1, tgt.s2, tgt.s3]):
                         votes[int(a), b] += upvote
-            
-        # print(f"TRIANGLETOLERANCE: {TRIANGLETOLERANCE}")
-        # print(f"Total triangle comparisons: {len(tri_ref) * len(tri_tgt)}")
-        # print(f"Total votes: {np.sum(votes)}, hit-ratio: {np.sum(votes) / (len(tri_ref) * len(tri_tgt))}")
+
+        logging.info(f"Total triangle comparisons: {len(tri_ref) * len(tri_tgt)}")
+        logging.info(f"Total votes: {np.sum(votes)}, hit-ratio: {np.sum(votes) / (len(tri_ref) * len(tri_tgt))}")
         result["triangle_tolerance"] = TRIANGLETOLERANCE
         result["triangle_comparisons"] = len(tri_ref) * len(tri_tgt)
         result["total_votes"] = np.sum(votes)
@@ -114,7 +116,7 @@ class StarMatcher:
         vVotingPairs = np.column_stack(np.unravel_index(np.argsort(votes, axis=None), shape=votes.shape))[::-1]
 
         cutoff = votes.max() / 4
-        # print(f"Vote cutoff threshold: {cutoff}")
+        logging.info(f"Vote cutoff threshold: {cutoff}")
         topVotePairs = list(filter(lambda r: votes[r[0],r[1]] > cutoff, vVotingPairs))
 
         matches = []
@@ -158,7 +160,7 @@ class StarMatcher:
             tri_ref = self._getTriangles(df_ref)
             tri_tgt = self._getTriangles(df_tgt)
 
-        # print(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
+        logging.info(f"Ref triangles: {len(tri_ref)}, Tgt triangles: {len(tri_tgt)}")
         result['ref_triangles'] = len(tri_ref)
         result['tgt_triangles'] = len(tri_tgt)
 
@@ -186,7 +188,9 @@ class StarMatcher:
                     if np.linalg.norm(tx - e) < 10000:
                         txs[i][1] += 1
                         mapped = True
-                        # print(tx,r.A, r.B, r.C, tgt.A, tgt.B, tgt.C)
+                        logging.info(f"tx: {tx}")
+                        logging.info(f"ref indices: {r.A}, {r.B}, {r.C}")
+                        logging.info(f"tgt indices: {tgt.A}, {tgt.B}, {tgt.C}")
                         break
                 if not mapped:
                     txs.append([tx, 1])

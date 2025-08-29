@@ -10,13 +10,11 @@ from focuser_service import FocuserService
 
 
 class FocuserWidget(BaseWidget):
-  def __init__(self, parentFrame, tk_root, focuser, camera):
+  def __init__(self, parentFrame, tk_root):
     super().__init__(parentFrame, "Focuser")
 
     self.focuserGotoTgt = tk.IntVar()
     self._tk_root = tk_root
-    self.focuser = focuser
-    self.camera = camera
 
     gotoFrame = ttk.Frame(self.widgetFrame)
     buttonFrame = ttk.Frame(gotoFrame)
@@ -36,7 +34,7 @@ class FocuserWidget(BaseWidget):
 
     ttk.Entry(controlFrame, textvariable=self.focuserGotoTgt, font=BaseWidget.EntryFont, width=BaseWidget.EntryWidth).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
     ttk.Button(controlFrame, text="Goto", command=self.focuserGoto, style='X.TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
-    ttk.Button(controlFrame, text='Refine', command=self.refine).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+    ttk.Button(controlFrame, text='Refine', command=self.refine_gui).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
 
     gotoFrame.pack(fill=tk.X)
 
@@ -44,12 +42,10 @@ class FocuserWidget(BaseWidget):
 
 
   def _connect(self, focuser, camera_svc):
-    self.focuser = focuser
-    self.focuser_svc = FocuserService(self._tk_root, self.focuser, camera_svc)
+    self.focuser_svc = FocuserService(self._tk_root, focuser, camera_svc)
     self._tk_root.bind(FocuserService.PositionUpdateEventName, self._update_focuser_position)
 
   def _disconnect(self):
-    self.focuser = None
     self.focuser_svc.terminate()
 
   def _on_focuser_error(self, job, error):
@@ -89,6 +85,15 @@ class FocuserWidget(BaseWidget):
       self.hdrInfo.set(self.focuser.position)
       return True
     return False
+
+  def refine_gui(self):
+    def on_refine_success(job, result):
+      tk.messagebox.showinfo("Info", f"Refine successful: {result}")
+
+    def on_refine_failure(job, error):
+      tk.messagebox.showwarning("Warning", f"Refine failed: {error}")
+
+    self.refine(on_completion=on_refine_success, on_failure=on_refine_failure)
 
   def refine(self, on_completion, on_failure):
     def on_failure_wrapper(job, error):

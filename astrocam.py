@@ -34,16 +34,22 @@ from skymap.skymap import SkyMap
 
 from phd_ctrl import start_guiding, stop_guiding
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(f"astrocam_{datetime.now().strftime('%Y%m%d')}.log"),
+        logging.StreamHandler()
+    ]
+)
 
 DEFAULT_NUM_EXPS = 5
 
 class AstroCam(AstroApp):
     def __init__(self, destDir):
         super().__init__()
-        self.mount = None
-        self.camera = None
-        self.focuser = None
-
         self.windowWidth = self.root.winfo_screenwidth()               
         self.windowHeight = self.root.winfo_screenheight()
         self.root.geometry(f"{self.windowWidth}x{self.windowHeight}")
@@ -124,13 +130,13 @@ class AstroCam(AstroApp):
 
         # Focuser controls
         focusFrame = ttk.Frame(widgetsFrame)
-        self.focuserWidget = FocuserWidget(focusFrame, self.root, self.focuser, self.camera)
+        self.focuserWidget = FocuserWidget(focusFrame, self.root)
         self.root.bind("<Key>", self.focuserWidget.onkeypress)
         focusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Setup mount status
         mountStatusFrame = ttk.Frame(widgetsFrame)
-        self.mountStatusWidget = MountStatusWidget(self.root, mountStatusFrame, self, self.mount)
+        self.mountStatusWidget = MountStatusWidget(self.root, mountStatusFrame)
         mountStatusFrame.pack(fill=tk.X, side=tk.TOP)
 
         # Star stats
@@ -153,6 +159,7 @@ class AstroCam(AstroApp):
 
     def on_closing(self):
         if tk.messagebox.askokcancel("Quit", "Are you sure you want to exit?"):
+            logging.info("Exiting app")
             if self.runningExposures or self.runningLiveView:
                 self.cancel()
             self.root.destroy()
@@ -261,13 +268,13 @@ class AstroCam(AstroApp):
         if fname:
             self.selected_file.set(os.path.basename(fname))
             self.file_listbox.delete(0, tk.END)
-            self.task_list = parse_tasks_yaml_file(fname)
             self.current_task_idx = -1
             try:
+                self.task_list = parse_tasks_yaml_file(fname)
                 for i, task in enumerate(self.task_list):
                     self.file_listbox.insert(tk.END, f"{i+1}. {task}")
             except Exception as e:
-                self.runStatus.set(f"Error loading file: {e}")
+                tk.messagebox.showinfo("Error", f"Error loading yaml file: {e}")
 
     def tabbed_controls(self, frame):
         notebook = ttk.Notebook(frame)
@@ -311,6 +318,7 @@ class AstroCam(AstroApp):
 
     def _start_task(self):
         self.cancel()
+        logging.info("Starting tasks")
         self.runStatus.set("Tasks started")
         self.current_task_idx = 0
         self.task_executing = True
@@ -318,6 +326,7 @@ class AstroCam(AstroApp):
         self.root.after_idle(self.exec_next_task)
 
     def _stop_task(self):
+        logging.info("Stopping tasks")
         self.task_cancel_request = True
         self.cancel()
 
@@ -328,6 +337,7 @@ class AstroCam(AstroApp):
             return
         task = self.task_list[self.current_task_idx]
         self.current_task_idx += 1
+        logging.info(f"Starting Task {self.current_task_idx}: {task}")
         self.runStatus.set(f"Task {self.current_task_idx}: {task}")
 
         try:
@@ -338,6 +348,7 @@ class AstroCam(AstroApp):
                         id = task.params['id']
                         with SkyMap() as sm:
                             matches = sm.search_catalog(cat, id)
+                        self.obsObject.set(f"{cat} {id}")
                     else:
                         self.obsObject.set(task.params['object'])
                         with SkyMap() as sm:
@@ -346,7 +357,7 @@ class AstroCam(AstroApp):
                         raise ValueError(f"Object not found: {task.params}")
                     else:
                         self.mountStatusWidget.goto_object(matches[0])
-                        self._increment_task(delay=30)
+                        self._increment_task(delay=60)
                 case "start_phd":
                     start_guiding()
                     self._increment_task(delay=5)
@@ -379,6 +390,7 @@ class AstroCam(AstroApp):
                 case _:
                     raise ValueError(f"Unknown task action: {task.action}")
         except Exception as e:
+            logging.error(f"Task failed: {e}")
             self.runStatus.set(f"Tasks stopped: {e}")
             self.task_executing = False
             self.cancel()
@@ -389,6 +401,7 @@ class AstroCam(AstroApp):
         else:
             self.runStatus.set(f"Tasks completed")
             self.task_executing = False
+            logging.info("All tasks completed")
 
 
 
@@ -406,7 +419,7 @@ class AstroCam(AstroApp):
         }
 
     def startExps(self):
-        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
+        logging.info(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}, and number of exposiures:{self.exposure_number.get()} I am sorry about the horrible spmlxivgz!!!!!! I hopee u engoied.")
         self.runningExposures = 1
         self.runningLiveView = False
         self.cancelJob = False
@@ -432,7 +445,7 @@ class AstroCam(AstroApp):
             else:
                 output_dir = output_dir / f"{job['image_type']}_{job['exp']}sec_{job['iso']}gain"
             output_dir.mkdir(parents=True, exist_ok=True)
-            job['output_fname'] = str(output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{self.camera.temperature}C.fit")
+            job['output_fname'] = str(output_dir / f"{job['image_type']}_{serial_no:05d}_{job['exp']}sec_{job['iso']}gain_{self.camera_svc._camera.temperature}C.fit")
         else:
             job['output_fname'] = None
         self.camera_svc.capture_image(job, on_success=self._on_exposure_completed, on_failure=self._on_exposure_failed)
@@ -442,7 +455,7 @@ class AstroCam(AstroApp):
             self.exposureProgress['value'] = event.y
         else:
             self.exposureProgress['value'] = 0
-            print("ERROR")
+            logging.error("ERROR")
 
     def _on_exposure_completed(self, job, imageData):
         # Start next exposure
@@ -453,7 +466,7 @@ class AstroCam(AstroApp):
 
     def _on_exposure_failed(self, job, error):
         self.exposureProgress['value'] = 0
-        print(f"Exposure failed: {error}")
+        logging.error(f"Exposure failed: {error}")
         self.endRunningExposures(f"Error: {error}")
 
     def _start_next_exposure(self, job):
@@ -487,7 +500,7 @@ class AstroCam(AstroApp):
             self.imageViewer.updateStars()
 
     def takeSnapshot(self, iso_override=None, exp_override=None):
-        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
+        logging.info(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.exposure_number.set(1)
         self.runningLiveView = False
         self.runStatus.set(f"Taking snapshot")
@@ -499,7 +512,7 @@ class AstroCam(AstroApp):
         self.startNextExposure(job)
 
     def startLiveview(self):
-        print(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
+        logging.info(f"iso={self.iso_number.get()}, exposiure time={self.exp_time.get()}")
         self.cancelJob = False
         self.runningLiveView = True
         self.enableExpButtons(False)
@@ -588,35 +601,26 @@ class AstroCam(AstroApp):
             self.connectBtn['image'] = self.on_icon
             self.connected = False
             self.camera_svc.terminate()
-            if self.mount:
-                self.mount.close()
-            if self.camera:
-               self.camera.close()
-            if self.focuser:
-                self.focuser.close()
-            self.mount = None
-            self.camera = None
-            self.focuser = None
             self.mountStatusWidget.disconnect()
             self.focuserWidget.disconnect()
             self.runStatus.set("Disconnected")
             self.enableExpButtons(False)
         else:
             try:
-                self.mount, self.camera, self.focuser = selectEquipment(self.root)
-                if self.mount is None or self.camera is None:
+                mount, camera, focuser = selectEquipment(self.root)
+                if mount is None or camera is None:
                     return
-                subprocess.Popen(["python.exe", "./coolerapp.py", self.camera.name], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
-                self.runningSimulator = self.camera.isSimulator()
+                subprocess.Popen(["python.exe", "./coolerapp.py", camera.name], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
+                self.runningSimulator = camera.isSimulator()
 
-                self.camera_svc = CaptureService(self.root, self.camera)
+                self.camera_svc = CaptureService(self.root, camera)
                 self.root.bind(CaptureService.CaptureStatusUpdateEventName, self._on_capture_status_update)
                 self.camera_svc.subscribe(self.histoViewer.update)
                 self.camera_svc.subscribe(self.imageViewer.update)
 
-                self.mountStatusWidget.connect(self.mount, self.camera_svc)
-                if self.focuser:
-                    self.focuserWidget.connect(self.focuser, self.camera_svc)
+                self.mountStatusWidget.connect(mount, self.camera_svc)
+                if focuser:
+                    self.focuserWidget.connect(focuser, self.camera_svc)
                 self.connected = True
                 self.connectBtn['image'] = self.off_icon
                 self.runStatus.set("Connected")
@@ -624,7 +628,7 @@ class AstroCam(AstroApp):
                 self.enableExpButtons(True)
 
             except Exception as err:
-                traceback.print_exc()
+                logging.error(f"Unable to connect: {err}")
                 self.runStatus.set("Unable to connect")
                 return
 

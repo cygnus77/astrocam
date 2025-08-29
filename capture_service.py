@@ -72,6 +72,7 @@ class CaptureService(ServiceBase):
 
     def capture_image(self, job, on_success=None, on_failure=None):
         return self.start_job(job, on_success, on_failure)
+    
 
 def main():
     from simulated_devices.simulated_camera import SimulatedCamera

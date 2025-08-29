@@ -9,6 +9,7 @@ from fwhm.fwhm import getFWHM_GaussianFitScaledAmp, fwhm1d, fwhm2d, fitgaussian2
 from fwhm.star_centroid import iwc_centroid
 from astropy.io import fits
 from xisf.xisf_parser import read_xisf
+import time
 
 # from debayer.nn_debayer import make_debayer
 # debayer = make_debayer()
@@ -31,6 +32,12 @@ class StarFinder():
     R = K - np.minimum(K,N)
     numstars, labels, stats, centroids = cv2.connectedComponentsWithStats(R, 4, cv2.CV_16U, cv2.CCL_WU)
 
+    # Select top 20 largest by area
+    top_indices = np.argsort(stats[1:, cv2.CC_STAT_AREA])[::-1][:20] + 1
+    centroids = centroids[top_indices]
+    stats = stats[top_indices]
+    numstars = len(top_indices)
+
     # Fixed star area
     # width = 19
     # height = 19
@@ -39,6 +46,7 @@ class StarFinder():
     #   width = max(width, stats[staridx, cv2.CC_STAT_WIDTH])
     #   height = max(height, stats[staridx, cv2.CC_STAT_HEIGHT])
     # print(f"Star dim: {width}, {height}")
+    total_gaussian_fit_time = 0
 
     bboxes = []
     for staridx in range(1, numstars):
@@ -64,7 +72,10 @@ class StarFinder():
       # fwhm_x, fwhm_y, curve_cx, curve_cy = getFWHM_GaussianFitScaledAmp(star)
       # fwhm_x = fwhm1d(star[int(max_row-min_row)//2, :])
       # fwhm_y = fwhm1d(star[:, int(max_col-min_col)//2])
+      gaussian_fit_start_time = time.time()
       ht, curve_cx, curve_cy, sigma_x, sigma_y = fitgaussian2d(star, circular=False, centered=False)
+      total_gaussian_fit_time += time.time() - gaussian_fit_start_time
+
       fwhm_x, fwhm_y = fwhm(sigma_x), fwhm(sigma_y)
       # fwhm_x, fwhm_y = star.shape
       #fwhm_x, fwhm_y, curve_cx, curve_cy = getFWHM(star)
@@ -81,6 +92,8 @@ class StarFinder():
                      'fwhm_x': fwhm_x,
                      'fwhm_y': fwhm_y,
                     })
+
+    print(f"fitgaussian2d on {numstars} images took {total_gaussian_fit_time:.2f} sec; avg: {(total_gaussian_fit_time/numstars):.6f} sec")
 
     sorted_bboxes = sorted(bboxes, key=lambda x: x['area'], reverse=True)
     if topk is not None:

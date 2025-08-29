@@ -12,6 +12,7 @@ from skymap.stardb.render_view import project
 from image_data import ImageData
 import itertools
 from sklearn.linear_model import LinearRegression
+import logging
 
 
 def cone_search_stardata(skymap: SkyMap, center: SkyCoord, fov_deg: float, mag_limit: float):
@@ -39,7 +40,7 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_l
     df_ref = cone_search_stardata(sm, center, fov_deg=fov_deg, mag_limit=mag_limit)
 
   df_tgt = imageData.stars
-  # print(f"Num ref stars: {len(df_ref)}, Num tgt stars: {len(df_tgt)}")
+  logging.info(f"Num ref stars: {len(df_ref)}, Num tgt stars: {len(df_tgt)}")
   result['num_ref'] = len(df_ref)
   result['num_tgt'] = len(df_tgt)
   matcher = StarMatcher()
@@ -48,7 +49,7 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_l
   # matcher_result = matcher.matchStars(df_ref, df_tgt, limit_ref_triangle_fov=1.0)
   result.update(matcher_result)
 
-  # # print(f"Solver votes: {df_tgt.votes.sum()}; matches: {(~df_tgt.starno.isnull()).sum()} stars")
+  # logging.info(f"Solver votes: {df_tgt.votes.sum()}; matches: {(~df_tgt.starno.isnull()).sum()} stars")
   # result['solver_votes'] = df_tgt.votes.sum()
   # result['matches'] = (~df_tgt.starno.isnull()).sum()
 
@@ -90,8 +91,8 @@ def platesolve(imageData: ImageData, center: SkyCoord, fov_deg: float=5.0, mag_l
   separation_arcmin = center.separation(pred_center).arcminute
   result['center'] = pred_center
   result['separation_arcmin'] = separation_arcmin
-  # print(f"Image Center RA,DEC: {pred_center}")
-  # print(f"Separation from target: {center.separation(pred_center).arcminute}")
+  logging.info(f"Image Center RA,DEC: {pred_center}")
+  logging.info(f"Separation from target: {center.separation(pred_center).arcminute}")
 
   if center.separation(pred_center).arcminute > 20:
     return result

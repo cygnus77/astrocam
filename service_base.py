@@ -1,5 +1,6 @@
 import threading
 import tkinter as tk
+import logging
 
 
 class ServiceBase(threading.Thread):
@@ -39,7 +40,7 @@ class ServiceBase(threading.Thread):
         pass
 
     def run(self):
-        print(f"Started {self.__class__.__name__} thread")
+        logging.info(f"Started {self.__class__.__name__} thread")
         self.on_start()
         while True:
             with self._job_avbl:
@@ -56,7 +57,7 @@ class ServiceBase(threading.Thread):
                 self._tk_root.event_generate(self.DoneEventName, when="tail", x=0)
             except Exception as e:
                 self.error_message = f"{self.__class__.__name__}: {e}"
-                print(self.error_message)
+                logging.error(self.error_message)
                 self._tk_root.event_generate(self.DoneEventName, when="tail", x=-2)
 
     def start_job(self, job, on_success=None, on_failure=None):

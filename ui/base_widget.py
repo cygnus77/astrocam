@@ -1,5 +1,7 @@
 import tkinter as tk
 import tkinter.ttk as ttk
+import logging
+
 
 class BaseWidget:
   EntryFont = ("Segoe UI", 14)
@@ -55,7 +57,7 @@ class BaseWidget:
         self.hdrInfo.set("")
         result = False
     except Exception as ex:
-      print(f"Failed to update {self.widgetName}: {ex}")
+      logging.error(f"Failed to update {self.widgetName}: {ex}")
       self.status = self.EXCLAMATION
       self.hdrInfo.set("")
       result = False
@@ -69,7 +71,7 @@ class BaseWidget:
       self._connect(*args, **kwargs)
       self.status = self.GREEN_CHECK
     except Exception as ex:
-      print(f"Failed to connect to {self.widgetName}: {ex}")
+      logging.error(f"Failed to connect to {self.widgetName}: {ex}")
       self.status = self.EXCLAMATION
       self.hdrInfo.set("")
     self.updateHeader()
@@ -79,7 +81,7 @@ class BaseWidget:
       self._disconnect()
       self.status = self.UNPLUGGED
     except Exception as ex:
-      print(f"Failed to disconnect from {self.widgetName}: {ex}")
+      logging.error(f"Failed to disconnect from {self.widgetName}: {ex}")
       self.status = self.EXCLAMATION
     self.hdrInfo.set("")
     self.updateHeader()

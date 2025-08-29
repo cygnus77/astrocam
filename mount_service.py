@@ -59,7 +59,7 @@ class MountService(ServiceBase):
 
     def _poll_mount_position(self):
         self._publish_mount_position()
-        self._tk_root.after(1000, self._poll_mount_position)
+        self._tk_root.after(5000, self._poll_mount_position)
 
     def _getObjectName(self, coord):
         try:
