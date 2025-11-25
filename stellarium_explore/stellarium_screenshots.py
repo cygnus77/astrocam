@@ -5,6 +5,8 @@ import math
 import json
 import numpy as np
 import requests
+import shutil
+
 
 ip="127.0.0.1"
 port=8090
@@ -56,18 +58,6 @@ def setView(altDeg, azDeg):
                           },auth=("",password))
     chk_ret(r)
 
-# South
-# setView(30.0, 0.0)
-# East
-# setView(30.0, 90.0)
-# North
-setView(30.0, 180.0)
-# West
-# setView(30.0, 270.0)
-# altAz = json.loads(s.main.getView()['altAz'])
-# print('Alt:', math.asin(altAz[2]) * 180.0 / math.pi)
-# print('Az:', math.atan2(altAz[1], altAz[0]) * 180.0 / math.pi)
-
 
 r = requests.get(f"http://{ip}:{port}/api/stelaction/list", auth=("",password))
 with open('stelaction_list_response.txt', 'wb') as f:
@@ -99,19 +89,32 @@ setProp("LandscapeMgr.cardinalPointsDisplayed", "false")
 setProp("ConstellationMgr.linesDisplayed", "false")
 setProp("ConstellationMgr.namesDisplayed", "false")
 setProp("GridLinesMgr.celestialPolesDisplayed", "false")
-setProp("GridLinesMgr.gridlinesDisplayed", "false")
 setProp("GroundGridMgr.horizonDisplayed", "false")
 setProp("NebulaMgr.flagOutlinesDisplayed", "false")
 setProp("NebulaMgr.flagHintDisplayed", "false")
 setProp("NebulaMgr.flagAdditionalNamesDisplayed", "false")
-setProp("StarMgr.flagAdditionalNamesDisplayed", "false")
 setProp("AsterismMgr.namesDisplayed", "false")
 setProp("MeteorShowers.enableLabels", "false")
 setProp("MilkyWay.flagMilkyWayDisplayed", "false")
 setProp("actionShow_MeteorShowers", "false")
-setProp("StarMgr.flagLabelsDisplayed", "false")
 setProp("LandscapeMgr.labelsDisplayed", "false")
-setProp("SolarSystem.labelsDisplayed", "false")
+setProp("MainView.flagOverwriteScreenshots", "true")
+setProp("StelGui.visible", "false")
+setProp("Satellites.flagHintsVisible", "false")
+
+
+def labels_off():
+    setProp("GridLinesMgr.gridlinesDisplayed", "false")
+    setProp("SolarSystem.labelsDisplayed", "false")
+    setProp("StarMgr.flagAdditionalNamesDisplayed", "false")
+    setProp("StarMgr.flagLabelsDisplayed", "false")
+
+def labels_on():
+    setProp("GridLinesMgr.gridlinesDisplayed", "true")
+    setProp("SolarSystem.labelsDisplayed", "true")
+    setProp("StarMgr.flagAdditionalNamesDisplayed", "true")
+    setProp("StarMgr.flagLabelsDisplayed", "true")
+
 
 r = requests.post(f"http://{ip}:{port}/api/main/fov", 
                           data={"fov":100},auth=("",password))
@@ -121,7 +124,50 @@ def doAction(action):
     r = requests.post(f"http://{ip}:{port}/api/stelaction/do?id={action}", auth=("",password))
     chk_ret(r)
 
-doAction("actionSave_Screenshot_Global")
+from itertools import product
+
+# for alt,az in product([30.0, 45.0], [0.0, 90.0, 180.0, 270.0]):
+#     labels_off()
+#     setView(alt, az)
+#     time.sleep(1.0)
+#     doAction("actionSave_Screenshot_Global")
+#     time.sleep(1.0)
+#     shutil.move(r"C:\Users\anand\OneDrive\Pictures\Stellarium\stellarium-001.png",
+#                 f"./stellarium_explore/sky_alt{alt}_az{az}.png")
+    
+#     labels_on()
+#     time.sleep(1.0)
+#     doAction("actionSave_Screenshot_Global")
+#     time.sleep(1.0)
+#     shutil.move(r"C:\Users\anand\OneDrive\Pictures\Stellarium\stellarium-001.png",
+#                 f"./stellarium_explore/sky_alt{alt}_az{az}_label.png")
+
+
+#     with open(f'./stellarium_explore/sky_alt{alt}_az{az}_info.json', 'w', encoding='utf-8') as f:
+#         r = requests.get(f"http://{ip}:{port}/api/main/status",auth=("",password))
+#         try:
+#             # pretty-print the full JSON response to avoid truncated repr
+#             data = r.json()
+#             f.write(json.dumps(data, indent=2, ensure_ascii=False))
+#         except ValueError:
+#             # fallback to raw text if response is not valid JSON
+#             f.write(r.text)
+
+
+
+# South
+# setView(30.0, 0.0)
+# East
+# setView(30.0, 90.0)
+# North
+setView(45.0, 180.0)
+# West
+# setView(30.0, 270.0)
+# altAz = json.loads(s.main.getView()['altAz'])
+# print('Alt:', math.asin(altAz[2]) * 180.0 / math.pi)
+# print('Az:', math.atan2(altAz[1], altAz[0]) * 180.0 / math.pi)
+labels_on()
+# doAction("actionSave_Screenshot_Global")
 
 time.sleep(1)
 
