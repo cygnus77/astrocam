@@ -139,6 +139,14 @@ class ImageData:
         if self._gray8 is None:
             self._gray8 = ((self.gray16 / np.iinfo(np.uint16).max) *np.iinfo(np.uint8).max).astype(np.uint8)
         return self._gray8
+    
+    def get_deb16_histogram(self):
+        """ Get 16-bit debayered histogram for R, G, B channels
+        """
+        r_hist, _ = np.histogram(self.deb16[:,:,0], bins=256, range=(0, 65536))
+        g_hist, _ = np.histogram(self.deb16[:,:,1], bins=256, range=(0, 65536))
+        b_hist, _ = np.histogram(self.deb16[:,:,2], bins=256, range=(0, 65536))
+        return r_hist, g_hist, b_hist
 
     def computeStars(self):
         self.starFinder = StarFinder()

@@ -13,6 +13,19 @@ from fwhm.fwhm import fit_1dgausssian
 import logging
 
 
+def calc_stretch(red, green, blue):
+    a = []
+    b = []
+    for i, h in enumerate([red, green, blue]):
+        fit_g = fit_1dgausssian(h)[:3]
+        if fit_g is None:
+          raise ValueError("Gaussian fit error")
+        ampl, avg, stddev = fit_g
+        fwhm = abs(8 * np.log(2) * stddev)
+        a.append(max(int(avg - 1.0 * fwhm), 1))
+        b.append(min(int(avg + 2.5 * fwhm), 255))
+    return a, b
+
 class HistogramViewer(BaseWidget):
 
   def __init__(self, parentFrame, image_container):
@@ -150,20 +163,12 @@ class HistogramViewer(BaseWidget):
       self.image_container.set_stretch(self.slider_low_val, self.slider_high_val)
     self.image_container.refresh()
 
+
   def _stretch(self):
     if self.red is None or self.green is None or self.blue is None:
       return
     try:
-      a = []
-      b = []
-      for i, h in enumerate([self.red, self.green, self.blue]):
-          fit_g = fit_1dgausssian(h)[:3]
-          if fit_g is None:
-            raise ValueError("Gaussian fit error")
-          ampl, avg, stddev = fit_g
-          fwhm = abs(8 * np.log(2) * stddev)
-          a.append(max(int(avg - 1.0 * fwhm), 1))
-          b.append(min(int(avg + 2.5 * fwhm), 255))
+      a, b = calc_stretch(self.red, self.green, self.blue)
       self.image_container.set_stretch(a, b)
 
       self.slider_low_val = [int(a) for a in a]
@@ -178,10 +183,8 @@ class HistogramViewer(BaseWidget):
       return
 
     if True:
+      self.red, self.green, self.blue = img.get_deb16_histogram()
       img = img.deb16
-      self.red, _ = np.histogram(img[:,:,0], bins=256, range=(0, 65536))
-      self.green, _ = np.histogram(img[:,:,1], bins=256, range=(0, 65536))
-      self.blue, _ = np.histogram(img[:,:,2], bins=256, range=(0, 65536))
     else:
       img = img.rgb24
       self.red = np.bincount(img[:,:,0].reshape(-1))

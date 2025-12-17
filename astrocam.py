@@ -32,7 +32,7 @@ from tkinter import filedialog
 from astro_tasks import parse_tasks_yaml_file
 from skymap.skymap import SkyMap
 
-from phd_ctrl import start_guiding, stop_guiding
+from phd_ctrl import start_guiding, stop_guiding, pause_guiding
 
 import logging
 
@@ -364,6 +364,9 @@ class AstroCam(AstroApp):
                 case "stop_phd":
                     stop_guiding()
                     self._increment_task(delay=5)
+                case "pause_phd":
+                    pause_guiding()
+                    self._increment_task(delay=5)
                 case "take_exposures":
                     self.exp_time.set(task.params['exp'])
                     self.iso_number.set(task.params['iso'])
@@ -634,7 +637,7 @@ class AstroCam(AstroApp):
 
     @staticmethod
     def run():
-        destDir = Path(".\images")
+        destDir = Path(r".\images")
         destDir.mkdir(exist_ok=True)
         astroCam = AstroCam(destDir)
         astroCam.root.mainloop()
